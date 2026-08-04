@@ -14,6 +14,7 @@ import CategoriesPage from './pages/admin/CategoriesPage.js';
 import AdminBookingsPage from './pages/admin/BookingsPage.js';
 import ReportPage from './pages/admin/ReportPage.js';
 import VerbindungenPage from './pages/admin/VerbindungenPage.js';
+import SystemPage from './pages/admin/SystemPage.js';
 import ZeigerPage from './pages/ZeigerPage.js';
 import ZeigerDetailPage from './pages/ZeigerDetailPage.js';
 import StreichenPage from './pages/StreichenPage.js';
@@ -56,6 +57,7 @@ export default function App() {
                   <Route path="buchungen" element={<AdminBookingsPage />} />
                   <Route path="berichte" element={<ReportPage />} />
                   <Route path="verbindungen" element={<VerbindungenPage />} />
+                  <Route path="system" element={<SystemPage />} />
                 </Route>
               </Route>
 

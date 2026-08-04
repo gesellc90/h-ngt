@@ -12,6 +12,7 @@ Lokale Web-App zur Getränkeabrechnung einer Verbindung. Mitglieder buchen ihre 
 - 📈 Verbrauchs-Auswertung (Anzahl & Umsatz je Getränk) für frei wählbare Zeiträume
 - 📜 Buchungshistorie & Stornierung innerhalb eines Zeitfensters
 - 📱 Responsive UI (Tablet, Smartphone, Desktop)
+- 🔄 Automatische App-Updates alle zwei Wochen (neuestes stabiles Release), von Admins im System-Bereich auch manuell anstoßbar
 
 ## Tech-Stack
 

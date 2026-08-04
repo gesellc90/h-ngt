@@ -170,6 +170,16 @@ Basis-URL: `/api/v1`. Alle geschützten Endpunkte erwarten `Authorization: Beare
 | GET     | `/zeiger/:id/bookings` | User  | Buchungen eines Zeigers                        |
 | POST    | `/zeiger/:id/close`    | User  | Zeiger schließen                               |
 
+### Update (M14, alle Admin-only)
+
+| Methode | Pfad             | Beschreibung                                                                  |
+| ------- | ---------------- | ----------------------------------------------------------------------------- |
+| GET     | `/update/status` | Zuletzt vom Pi-Helper geschriebener Status (Version, Ergebnis, `in_progress`) |
+| POST    | `/update`        | Schreibt Marker `"update"` → 202; 409 `UPDATE_IN_PROGRESS` wenn bereits offen |
+| POST    | `/update/check`  | Schreibt Marker `"check"` (nur Prüfung, keine Installation) → 202             |
+
+Keine dieser Routen löst ein Update selbst aus oder spricht mit GitHub — Details siehe „Auto-Update & Privilege-Separation" unten.
+
 ## Auth-Flow
 
 1. Frontend POSTet Credentials an `/auth/login`.
@@ -190,6 +200,44 @@ Basis-URL: `/api/v1`. Alle geschützten Endpunkte erwarten `Authorization: Beare
 - **CSV-Export**: Zellen, die mit `= + - @` beginnen, werden neutralisiert (Schutz vor Formel-Injektion in Excel/LibreOffice).
 - **Profilbilder öffentlich**: `GET /avatars/:file` liegt bewusst **vor** der Auth-Middleware und ist damit ohne Login abrufbar. Im vertrauenswürdigen WLAN akzeptierter Trade-off (Bilder sind nicht sensibel, spart einen Blob-Fetch mit Token im Frontend).
 - **Backups**: Cron-Job kopiert SQLite-DB täglich nach `/var/backups/getraenke/`; das `AVATAR_DIR` gehört ebenfalls ins Backup.
+
+## Auto-Update & Privilege-Separation (M14)
+
+Die App aktualisiert sich alle zwei Wochen selbst auf das neueste stabile
+GitHub-Release; Admins können das im UI („System"-Bereich) auch manuell
+anstoßen oder nur prüfen lassen. Vollständige Architektur, Störungssuche und
+Installationsschritte stehen in [`docs/AUTO-UPDATE.md`](docs/AUTO-UPDATE.md)
+— hier nur der sicherheitsrelevante Kern:
+
+- **Der App-Prozess bleibt unprivilegiert.** `getraenke.service` läuft weiter
+  gehärtet (`NoNewPrivileges=true`, `ProtectSystem=strict`, kein sudo, siehe
+  `scripts/getraenke.service`) und macht **keinen** eigenen Netzabruf zu
+  GitHub. Ein Admin-Klick auf „Jetzt aktualisieren"/„Jetzt prüfen" führt
+  lediglich dazu, dass `UpdateService` (`backend/src/services/UpdateService.ts`)
+  eine harmlose Marker-Datei (`update-requested`, Inhalt nur `"update"` oder
+  `"check"` — nie ein Kommando oder eine Versionsangabe) in sein eigenes,
+  ohnehin beschreibbares `StateDirectory` schreibt.
+- **Eine separate, root-betriebene systemd-Infrastruktur übernimmt den Rest.**
+  `getraenke-update.path` (auf dem Pi installiert, von systemd verwaltet)
+  beobachtet exakt diese Marker-Datei und startet bei ihrem Erscheinen
+  `getraenke-update.service` (läuft als root). `getraenke-update.timer` löst
+  dieselbe Unit unabhängig davon alle zwei Wochen aus. Erst dieser
+  privilegierte Helper (`scripts/pi-self-update.sh`) fragt die GitHub-API nach
+  dem neuesten stabilen Release, lädt bei Bedarf das (tokenauthentifizierte)
+  Release-Asset und installiert es über `scripts/pi-release.sh` — dasselbe
+  Skript, das auch der reguläre Tag-Deploy nutzt (Backup, atomarer
+  Symlink-Swap, Migrationen, Smoke-Test, automatischer Rollback bei Fehlern).
+- **Status-Rückkanal nur über Datei.** Der Helper schreibt nach jedem Lauf
+  `update-status.json` (aktuelle/verfügbare Version, Zeitpunkt, Ergebnis,
+  Auslöser) in dasselbe Verzeichnis. `GET /update/status` liest ausschließlich
+  diese Datei — die App erfährt die verfügbare Version, ohne selbst online zu
+  gehen.
+- **`UPDATE_STATE_DIR`** (ENV, Dev: `./data`, Prod: `/var/lib/getraenke`) muss
+  mit dem `StateDirectory` des Pi-Helpers übereinstimmen, sonst sieht die App
+  nie einen Status und der Helper nie einen Marker.
+- **Token-Scope**: Das GitHub-Token liegt nur unter `/etc/getraenke/update.env`
+  (root-only lesbar) für `getraenke-update.service` — niemals im
+  `getraenke`-App-Prozess.
 
 ## Verzeichnisstruktur (Detail)
 

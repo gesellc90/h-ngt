@@ -32,6 +32,7 @@ const testEnv = {
   JWT_SECRET: TEST_JWT_SECRET,
   JWT_EXPIRES_IN: '8h',
   AVATAR_DIR: '/tmp',
+  UPDATE_STATE_DIR: '/tmp',
   TRUST_PROXY: 0,
 };
 

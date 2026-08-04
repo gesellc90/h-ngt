@@ -69,14 +69,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: systemd-analyze verify (Service-Unit)
+      - name: systemd-analyze verify (Service-/Timer-/Path-Units)
         # Filtert die Warnungen über andere System-Units der ubuntu-Runner-Umgebung
-        # raus und fokussiert nur Hinweise zu unserer Datei. Exit-Code 0 = OK.
+        # raus und fokussiert nur Hinweise zu unseren Dateien. Exit-Code 0 = OK.
         run: |
           set -euo pipefail
-          systemd-analyze verify scripts/getraenke.service 2>&1 \
-            | grep -E '^(scripts/|/.+/getraenke)' \
-            || echo "Keine Warnungen für scripts/getraenke.service."
+          for unit in scripts/getraenke.service \
+                      scripts/getraenke-update.service \
+                      scripts/getraenke-update.path \
+                      scripts/getraenke-update.timer; do
+            echo "Prüfe $unit"
+            systemd-analyze verify "$unit" 2>&1 \
+              | grep -E '^(scripts/|/.+/getraenke)' \
+              || echo "Keine Warnungen für $unit."
+          done
 
       - name: visudo -c (sudoers-Snippet)
         # `visudo -cf <file>` parst, ohne zu installieren. Schlägt mit Exit-Code
@@ -90,6 +96,11 @@ jobs:
             echo "Prüfe $f"
             bash -n "$f"
           done
+
+      - name: ShellCheck (Release- & Auto-Update-Skripte)
+        # Tiefere Prüfung für die M14-Skripte (siehe MILESTONES.md) —
+        # shellcheck ist auf ubuntu-latest vorinstalliert.
+        run: shellcheck scripts/pi-release.sh scripts/pi-self-update.sh
 
   # ---------------------------------------------------------------------------
   # 2a) TypeCheck Backend – parallel zu typecheck-frontend.

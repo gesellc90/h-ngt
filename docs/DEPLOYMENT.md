@@ -73,6 +73,11 @@ DB_PATH=/var/lib/getraenke/getraenke.db
 # schlägt der Upload wegen ProtectSystem=strict fehl.
 AVATAR_DIR=/var/lib/getraenke/avatars
 
+# Rückkanal zum Auto-Update-Helper (M14): Statusdatei lesen, Marker-Datei
+# schreiben. MUSS mit dem StateDirectory des Helpers übereinstimmen, sonst
+# sieht die App nie einen Status und der Helper nie einen Marker.
+UPDATE_STATE_DIR=/var/lib/getraenke
+
 # JWT-Secret: mindestens 32 Zeichen, kryptografisch zufällig.
 # Erzeugen z. B. mit:  openssl rand -hex 48
 JWT_SECRET=<HIER 32+ zufällige Zeichen einsetzen, NIE committen!>
@@ -89,6 +94,7 @@ PORT=3001
 LOG_LEVEL=info
 DB_PATH=/var/lib/getraenke/getraenke.db
 AVATAR_DIR=/var/lib/getraenke/avatars
+UPDATE_STATE_DIR=/var/lib/getraenke
 JWT_SECRET=<bitte ersetzen>
 JWT_EXPIRES_IN=8h
 EOF
@@ -206,11 +212,18 @@ Jobs:
 
 1. **`build` auf `ubuntu-latest`** — `npm ci`, `npm run build` für Backend
    (`tsc`) und Frontend (`vite`). Das Tarball enthält nur `*/dist/`, die
-   Package-Manifests und `scripts/deploy-migrate.sh` — KEINE `node_modules`,
-   weil `better-sqlite3` auf dem Pi nativ für ARM kompiliert werden muss.
-2. **`deploy` auf `[self-hosted, raspberry-pi]`** — übernimmt das Artefakt und
-   führt diese Schritte aus (jeder einzelne kann abbrechen, alle nach dem
-   Symlink-Swap lösen ggf. Rollback aus):
+   Package-Manifests, `scripts/deploy-migrate.sh` und `scripts/pi-release.sh`
+   — KEINE `node_modules`, weil `better-sqlite3` auf dem Pi nativ für ARM
+   kompiliert werden muss. Der Tarball wird zusätzlich als **GitHub-Release-
+   Asset** an das Tag angehängt (dauerhaft abrufbar, unabhängig von der
+   30-Tage-Actions-Artefakt-Retention) — Voraussetzung für den geplanten
+   Auto-Update-Helper auf dem Pi (siehe `MILESTONES.md`, M14).
+2. **`deploy` auf `[self-hosted, raspberry-pi]`** — lädt das Artefakt herunter
+   und ruft `scripts/pi-release.sh <tarball> <tag>` auf. Das Skript kapselt
+   die gesamte Release-Installation inkl. Rollback (Verhalten unverändert
+   gegenüber früher, nur aus den Workflow-Steps in ein wiederverwendbares
+   Skript gezogen — dasselbe Skript soll später auch der Auto-Update-Helper
+   nutzen):
    1. _Snapshot:_ aktuelles Ziel von `current` merken (Rollback-Anker).
    2. _DB-Backup_ via `sqlite3 .backup` →
       `/var/backups/getraenke/<tag>-<utc-timestamp>.sqlite`.
@@ -221,18 +234,23 @@ Jobs:
    5. _Migrationen_ via `scripts/deploy-migrate.sh`. Liest
       `/etc/getraenke/env` und ruft `migrate-cli.js` als App-User
       `getraenke` auf. Bei Fehler: Abbruch, alte App läuft weiter.
-   6. _Symlink-Swap_ mit `ln -sfn` + `mv -Tf` (atomar auf Linux).
+   6. _Symlink-Swap_ mit `ln -sfn` + `mv -Tf` (atomar auf Linux). Ab hier
+      greift bei einem Fehler automatisch der Rollback (Trap im Skript).
    7. _Service-Restart_ via `sudo systemctl restart getraenke.service`,
       gefolgt von 5× `is-active`-Check à 2 s.
    8. _Smoke-Test_ `curl -fsS --max-time 10 http://localhost:3001/api/v1/health`,
       ebenfalls 5× retry.
-   9. _Rollback_ (nur wenn Swap erfolgt war + ein späterer Step gescheitert):
-      Symlink auf vorheriges Release zurück + erneuter Restart, Workflow
-      wird trotzdem rot abgeschlossen.
+   9. _Rollback_ (nur wenn Swap erfolgt war + ein späterer Schritt
+      gescheitert ist): Symlink auf vorheriges Release zurück + erneuter
+      Restart, Skript beendet sich trotzdem mit Fehlercode → Workflow wird
+      rot abgeschlossen.
+   10. _Aufbewahrung:_ ältere Releases als die letzten 5 werden gelöscht
+       (das aktive Release wird nie gelöscht, auch wenn es theoretisch
+       „raus" sortiert würde).
 
-3. _Aufbewahrung:_ ältere Releases als die letzten 5 werden gelöscht
-   (das aktive Release wird nie gelöscht, auch wenn es theoretisch
-   „raus" sortiert würde).
+   Konfigurierbar über Umgebungsvariablen (`RELEASES_DIR`, `CURRENT_LINK`,
+   `DB_PATH`, `BACKUP_DIR`, `HEALTH_URL`, `KEEP_RELEASES`) — siehe
+   Kommentar-Header in `scripts/pi-release.sh`.
 
 > **Backup-Hinweis (Profilbilder):** Das Deploy-DB-Backup (Schritt 2) sichert
 > **nur** `getraenke.db`. Die Profilbilder unter `AVATAR_DIR`
@@ -320,4 +338,5 @@ Aufwand Variante A: ~50–80 Zeilen + Tests, eigener `feat(server)`-PR.
 
 - [`RASPBERRY-PI-SETUP.md`](./RASPBERRY-PI-SETUP.md) — Pi-Grundeinrichtung (OS-Flash, Hardening, Node 20, User/Verzeichnis-Layout, Cron-Backup).
 - [`RUNNER-SETUP.md`](./RUNNER-SETUP.md) — Registrierung des GitHub-Actions-Self-Hosted-Runners auf dem Pi.
+- [`AUTO-UPDATE.md`](./AUTO-UPDATE.md) — Automatisches App-Update alle zwei Wochen + manueller Admin-Anstoß (M14): Architektur, Privilege-Separation, Störungssuche.
 - [`TESTING.md`](./TESTING.md) — Test-Schichten, Playwright-E2E lokal ausführen, Trace-Viewer.

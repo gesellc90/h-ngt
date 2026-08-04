@@ -1,0 +1,22 @@
+# scripts/getraenke-update.timer
+#
+# Löst getraenke-update.service etwa alle zwei Wochen aus (voller
+# Update-Lauf: neuestes stabiles Release prüfen und bei Bedarf installieren).
+#
+# Installation: siehe Kommentar-Header in scripts/getraenke-update.service.
+
+[Unit]
+Description=Zweiwöchentliches automatisches App-Update (Hängt!)
+Documentation=https://github.com/gesellc90/haengt/blob/main/docs/AUTO-UPDATE.md
+
+[Timer]
+# Montag in der ersten und dritten Kalenderwoche eines Monats (Tage 01–07
+# und 15–21), nachts um 03:30 Uhr — kein exaktes 14-Tage-Intervall, aber
+# ausreichend „grob zweiwöchentlich" ohne zusätzliche Cron-Abhängigkeit.
+OnCalendar=Mon *-*-01..07,15..21 03:30:00
+# Verpasster Lauf (Pi war zum geplanten Zeitpunkt aus) wird beim nächsten
+# Boot nachgeholt.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

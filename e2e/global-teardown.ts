@@ -45,4 +45,11 @@ export default async function globalTeardown(): Promise<void> {
   } catch (err) {
     console.warn('[e2e-teardown] tmpDir-Cleanup fehlgeschlagen:', err);
   }
+
+  try {
+    rmSync(handle.updateStateDir, { recursive: true, force: true });
+    console.log(`[e2e-teardown] updateStateDir entfernt: ${handle.updateStateDir}`);
+  } catch (err) {
+    console.warn('[e2e-teardown] updateStateDir-Cleanup fehlgeschlagen:', err);
+  }
 }

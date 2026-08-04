@@ -142,11 +142,12 @@ node --version    # erwartet: v20.x
 npm --version     # erwartet: 10.x
 ```
 
-### 4.2 SQLite-CLI (für DB-Backups im Deploy)
+### 4.2 SQLite-CLI & jq (für DB-Backups und den Auto-Update-Helper)
 
 ```bash
-sudo apt-get install -y sqlite3
+sudo apt-get install -y sqlite3 jq
 sqlite3 --version
+jq --version
 ```
 
 ### 4.3 Build-Tools für `better-sqlite3` (ARM-Native-Build)
@@ -237,6 +238,36 @@ sudo journalctl -u getraenke.service -f
 # Health-Endpoint von außen (vom Vereins-LAN aus)
 curl -fsS http://getraenke-pi.local:3001/api/v1/health
 ```
+
+## Schritt 10 — Auto-Update (M14)
+
+Automatisches App-Update alle zwei Wochen + manueller Anstoß durch Admins.
+Ausführliche Architektur (Privilege-Separation, Marker-/Status-Datei) in
+[`AUTO-UPDATE.md`](./AUTO-UPDATE.md) — hier nur die Installation:
+
+```bash
+# 1) Token-Konfiguration anlegen (Fine-Grained-PAT, nur "Contents: Read-only")
+sudo install -d -m 0755 /etc/getraenke
+sudo cp scripts/update.env.example /etc/getraenke/update.env
+sudo nano /etc/getraenke/update.env      # GITHUB_TOKEN eintragen
+sudo chown root:root /etc/getraenke/update.env
+sudo chmod 0600 /etc/getraenke/update.env
+
+# 2) Units installieren
+sudo cp scripts/getraenke-update.service scripts/getraenke-update.path \
+        scripts/getraenke-update.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now getraenke-update.path getraenke-update.timer
+
+# 3) Manueller Testlauf
+sudo systemctl start getraenke-update.service
+sudo journalctl -u getraenke-update -f
+cat /var/lib/getraenke/update-status.json
+```
+
+Voraussetzung: mindestens ein Tag-Deploy muss bereits gelaufen sein
+(`/opt/getraenke/current` muss existieren — der Helper liegt selbst im
+Release-Tarball unter `scripts/pi-self-update.sh`).
 
 ## Troubleshooting
 

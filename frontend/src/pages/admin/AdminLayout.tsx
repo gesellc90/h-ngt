@@ -79,6 +79,9 @@ export default function AdminLayout() {
         <NavLink to="/admin/verbindungen" style={({ isActive }) => tabStyle(isActive)}>
           Verbindungen
         </NavLink>
+        <NavLink to="/admin/system" style={({ isActive }) => tabStyle(isActive)}>
+          System
+        </NavLink>
       </nav>
 
       {/* Unter-Seite */}

@@ -9,6 +9,36 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- **M14 (PR 5) — E2E-Test & Doku-Abschluss**
+  - Playwright-E2E (`09-admin-update.spec.ts`): Update-Status inkl. Versionen anzeigen, „Jetzt aktualisieren" schreibt die Marker-Datei, Dialog-Abbruch schreibt keinen Marker, Nicht-Admin wird umgeleitet. `global-setup.ts` legt dafür ein isoliertes `UPDATE_STATE_DIR` für den E2E-Backend-Prozess an.
+  - `ARCHITECTURE.md`: neuer Abschnitt „Auto-Update & Privilege-Separation" sowie die `/update`-Routen in der API-Übersicht.
+  - **Fix (durch den E2E-Test entdeckt):** `scroll-padding-top`/`scroll-padding-bottom` in `frontend/src/index.css` ergänzt, damit `scrollIntoView` Ziele nicht mehr unter dem sticky Header bzw. der fixierten mobilen TabBar verschwinden lässt — betraf potenziell jede Seite mit Inhalt unterhalb der ersten Bildschirmhöhe auf schmalen Viewports.
+
+- **M14 (PR 4) — Frontend: Admin-Bereich „System / Update"**
+  - Neuer Admin-Reiter „System" (`/admin/system`): zeigt den Update-Status (Badge, laufende/verfügbare Version, Zeitpunkt der letzten Prüfung inkl. Auslöser) und die Buttons „Jetzt prüfen"/„Jetzt aktualisieren".
+  - „Jetzt aktualisieren" fragt vorher eine Bestätigung ab (Hinweis auf den kurzen Neustart der App). Solange ein Update läuft, pollt die Seite den Status und zeigt bei Abschluss automatisch einen Erfolgs-/Fehler-Toast; ein bereits laufendes Update (409) wird als klare Meldung statt Rohfehler angezeigt.
+  - Neues API-Modul `updateApi` (`getStatus`/`requestUpdate`/`requestCheck`) und Typ `UpdateStatus` in `types/api.ts`.
+  - 7 neue Vitest/RTL-Tests (`SystemPage.test.tsx`); manuell im Browser gegen den laufenden Dev-Server verifiziert.
+
+- **M14 (PR 3) — Backend: Update-Status lesen & Update anstoßen**
+  - `UpdateService`: liest `update-status.json` robust (fehlende/kaputte Datei oder unbekanntes `last_result` → `"unknown"`, wirft nie), schreibt die Marker-Datei `update-requested` atomar (Inhalt nur `"update"`/`"check"`) und wirft 409 `UPDATE_IN_PROGRESS`, wenn bereits ein Update läuft oder ein Marker offen ist.
+  - Neue Routen `GET /api/v1/update/status`, `POST /api/v1/update` und `POST /api/v1/update/check` (alle Admin-only via `requireRole('admin')`). Kein Endpunkt löst selbst ein Update aus — sie schreiben nur die Marker-Datei, die der Pi-lokale `getraenke-update.path` beobachtet.
+  - Neue ENV-Variable `UPDATE_STATE_DIR` (Dev: `./data`, Prod: `/var/lib/getraenke`), muss mit dem StateDirectory des Auto-Update-Helpers übereinstimmen.
+  - Audit-Log-Event `update_requested` (`actor_id`, `meta.mode`).
+  - 9 neue Unit-Tests (`UpdateService`) + 11 neue Integrationstests (`update`-Router); gesamte Backend-Suite (345 Tests) grün.
+
+- **M14 (PR 2) — Auto-Update-Helper, Timer & Path-Unit**
+  - `scripts/pi-self-update.sh`: fragt das neueste stabile GitHub-Release ab, vergleicht mit der aktiven Version, lädt bei Bedarf das (private, tokenauthentifizierte) Release-Asset und installiert es über `pi-release.sh`. Schreibt nach jedem Lauf `/var/lib/getraenke/update-status.json` (Version, Zeitstempel, Ergebnis, Auslöser). Modus („nur prüfen" vs. „aktualisieren") wird über den Inhalt einer Marker-Datei gesteuert, die konsumiert (gelöscht) wird; ohne Marker (Timer-Trigger) läuft ein voller Update-Lauf. `flock` verhindert parallele Läufe.
+  - `scripts/getraenke-update.service` (root, oneshot), `scripts/getraenke-update.timer` (grob zweiwöchentlich, `Persistent=true` für nachgeholte Läufe) und `scripts/getraenke-update.path` (beobachtet die Marker-Datei) — bilden zusammen die Privilege-Separation: der App-Prozess selbst bleibt unprivilegiert und schreibt nur die harmlose Marker-Datei; die eigentliche Installation läuft über eine separate, root-betriebene systemd-Infrastruktur.
+  - `scripts/update.env.example`: Konfigurationsvorlage für das Fine-Grained-GitHub-Token (`Contents: Read-only`, nur dieses Repo), `/etc/getraenke/update.env`, Mode 0600, nur für den root-Helper lesbar — nie im App-Prozess.
+  - `docs/AUTO-UPDATE.md` (neu): Architektur, Privilege-Separation, Status-Rückkanal, Störungssuche. `RASPBERRY-PI-SETUP.md` um Installationsschritt 10 ergänzt; `DEPLOYMENT.md` verlinkt.
+  - `deploy.yml`: `pi-self-update.sh` ist jetzt Teil des Release-Tarballs. `ci.yml`: `systemd-analyze verify` und `shellcheck` decken die neuen Units/Skripte ab.
+
+- **M14 (PR 1) — Pi-Release-Logik extrahiert & Release-Asset**
+  - `scripts/pi-release.sh`: kapselt die komplette Release-Installation auf dem Pi (Snapshot, DB-Backup, Entpacken, `npm ci --omit=dev`, Migrationen, atomarer Symlink-Swap, Service-Restart, Smoke-Test, automatischer Rollback bei Fehler nach dem Swap, Aufräumen alter Releases). Konfigurierbar über `RELEASES_DIR`, `CURRENT_LINK`, `DB_PATH`, `BACKUP_DIR`, `HEALTH_URL`, `KEEP_RELEASES`. Ersetzt die bisher inline in `deploy.yml` verteilten Steps 1:1 im Verhalten — ist als gemeinsame Grundlage für den Tag-Deploy **und** den Auto-Update-Helper gedacht.
+  - `deploy.yml`: Pi-Job ruft nur noch `pi-release.sh` auf; Build-Job hängt den Release-Tarball zusätzlich als GitHub-Release-Asset ans Tag an (dauerhaft abrufbar, unabhängig von der 30-Tage-Actions-Artefakt-Retention).
+  - `ci.yml`: neuer `shellcheck`-Schritt für `scripts/pi-release.sh`.
+
 - **M13 — Wirtschaftskommission & Konten-Streichung**
   - Migration 012: neue Spalten an `members` — `is_wirtschaftskommission` (Capability-Flag analog `can_book_for_others`) und `struck_until` (nullable ISO-Zeitstempel). Bewusst als Flag statt neuem `role`-Wert modelliert, da ein Rebuild der `members`-Tabelle wegen der `ON DELETE RESTRICT`-Fremdschlüssel nicht gefahrlos möglich ist.
   - Neue Konto-Variante „Wirtschaftskommission" (WK): darf Personen-Konten streichen und entstreichen. Streichen und Entstreichen dürfen sowohl WK-Konten als auch Admins (`requireWkOrAdmin`-Middleware; JWT-Payload um `is_wk` erweitert, wird — wie die Rolle — bei jeder Anfrage frisch aus der DB übernommen).

@@ -136,3 +136,22 @@ export interface VerbindungRow {
   active: 0 | 1;
   created_at: string;
 }
+
+// -- Auto-Update (M14) -------------------------------------------------------
+
+export type UpdateResult =
+  | 'unknown'
+  | 'up_to_date'
+  | 'update_available'
+  | 'in_progress'
+  | 'success'
+  | 'failed';
+
+export interface UpdateStatus {
+  current_version: string | null;
+  available_version: string | null;
+  last_checked_at: string | null;
+  last_result: UpdateResult;
+  last_trigger: string | null;
+  in_progress: boolean;
+}

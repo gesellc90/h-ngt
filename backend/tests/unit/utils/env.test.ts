@@ -16,6 +16,7 @@ describe('loadEnv', () => {
     expect(env.DB_PATH).toBe('./data/getraenke.db');
     expect(env.JWT_EXPIRES_IN).toBe('8h');
     expect(env.AVATAR_DIR).toBe('./data/avatars');
+    expect(env.UPDATE_STATE_DIR).toBe('./data');
     expect(env.TRUST_PROXY).toBe(0);
   });
 

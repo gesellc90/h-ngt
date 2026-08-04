@@ -1,0 +1,51 @@
+# scripts/getraenke-update.service
+#
+# Oneshot-Unit für den Auto-Update-Helper (M14). Wird ausgelöst durch:
+#   - getraenke-update.timer  (alle zwei Wochen, voller Update-Lauf)
+#   - getraenke-update.path   (Marker-Datei aus dem Admin-Bereich)
+#
+# ----------------------------------------------------------------------------
+# Installation (einmalig pro Host)
+# ----------------------------------------------------------------------------
+#   sudo cp scripts/getraenke-update.service scripts/getraenke-update.path \
+#           scripts/getraenke-update.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now getraenke-update.path getraenke-update.timer
+#
+# Voraussetzung: /etc/getraenke/update.env (siehe scripts/update.env.example).
+#
+# ----------------------------------------------------------------------------
+# Verifikation & Debugging
+# ----------------------------------------------------------------------------
+#   sudo systemd-analyze verify scripts/getraenke-update.service
+#   sudo systemctl start getraenke-update.service   # manueller Testlauf
+#   sudo journalctl -u getraenke-update -f
+#
+# ----------------------------------------------------------------------------
+# Privilege-Separation (siehe docs/AUTO-UPDATE.md)
+# ----------------------------------------------------------------------------
+# Diese Unit läuft bewusst als root — sie braucht Zugriff auf
+# `systemctl restart`, den App-User `getraenke` (via deploy-migrate.sh) und
+# /etc/getraenke/update.env (GitHub-Token). Der App-Dienst
+# (getraenke.service) selbst bleibt strikt unprivilegiert (kein sudo,
+# ProtectSystem=strict) und kann diese Unit nicht direkt anstoßen — er
+# schreibt nur eine harmlose Marker-Datei, die getraenke-update.path
+# beobachtet.
+
+[Unit]
+Description=Hängt! – Automatisches App-Update (Prüfung + Installation)
+Documentation=https://github.com/gesellc90/haengt/blob/main/docs/AUTO-UPDATE.md
+After=network-online.target getraenke.service
+Wants=network-online.target
+# Ohne aktives Release gibt es nichts zu aktualisieren.
+ConditionPathExists=/opt/getraenke/current
+
+[Service]
+Type=oneshot
+ExecStart=/opt/getraenke/current/scripts/pi-self-update.sh
+TimeoutStartSec=600
+
+# --- Logging ----------------------------------------------------------------
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=getraenke-update

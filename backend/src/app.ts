@@ -24,6 +24,7 @@ import { BookingService } from './services/BookingService.js';
 import { ReportService } from './services/ReportService.js';
 import { ZeigerService } from './services/ZeigerService.js';
 import { VerbindungenService } from './services/VerbindungenService.js';
+import { UpdateService } from './services/UpdateService.js';
 import { healthRouter } from './routes/health.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createMembersRouter } from './routes/members.js';
@@ -33,6 +34,7 @@ import { createBookingsRouter } from './routes/bookings.js';
 import { createReportsRouter } from './routes/reports.js';
 import { createZeigerRouter } from './routes/zeiger.js';
 import { createVerbindungenRouter } from './routes/verbindungen.js';
+import { createUpdateRouter } from './routes/update.js';
 import { createErrorHandler } from './middleware/errorHandler.js';
 
 export interface AppOptions {
@@ -126,6 +128,7 @@ export function createApp({ logger, db, env }: AppOptions): Express {
   const reportService = new ReportService(bookingsRepo, membersRepo, zeigerRepo, verbindungenRepo);
   const zeigerService = new ZeigerService(zeigerRepo, verbindungenRepo, auditLogRepo, bookingsRepo);
   const verbindungenService = new VerbindungenService(verbindungenRepo, auditLogRepo);
+  const updateService = new UpdateService(env.UPDATE_STATE_DIR, auditLogRepo);
 
   // -- Profilbilder (statische Auslieferung vor API-Routen) -------------------
   app.use('/avatars', express.static(env.AVATAR_DIR));
@@ -143,6 +146,7 @@ export function createApp({ logger, db, env }: AppOptions): Express {
   app.use('/api/v1/reports', createReportsRouter(authService, reportService));
   app.use('/api/v1/zeiger', createZeigerRouter(authService, zeigerService));
   app.use('/api/v1/verbindungen', createVerbindungenRouter(authService, verbindungenService));
+  app.use('/api/v1/update', createUpdateRouter(authService, updateService));
 
   // -- Frontend (SPA) ---------------------------------------------------------
   // Im Production-Build liegen die gebauten React-Assets in frontend/dist,

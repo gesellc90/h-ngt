@@ -44,6 +44,10 @@ backend/data/*.db-shm
 *.sqlite
 *.sqlite-journal
 
+# Auto-Update-Rückkanal (M14, lokal erzeugt — siehe UPDATE_STATE_DIR)
+backend/data/update-status.json
+backend/data/update-requested
+
 # Cache
 .cache/
 .turbo/

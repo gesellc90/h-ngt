@@ -2,21 +2,22 @@
 
 Dieser Plan unterteilt das Projekt in 10 aufeinander aufbauende Meilensteine. Jeder Meilenstein liefert einen demonstrierbaren Mehrwert und kann in 3–7 Tagen abgeschlossen werden.
 
-| #   | Titel                                         | Dauer (geschätzt) | Abhängigkeiten              |
-| --- | --------------------------------------------- | ----------------- | --------------------------- |
-| M1  | Projekt-Setup & Tooling                       | 2–3 Tage          | —                           |
-| M2  | Datenbankschicht & Migrationen                | 2–3 Tage          | M1                          |
-| M3  | Authentifizierung & Sicherheit                | 3–4 Tage          | M2                          |
-| M4  | API / Backend-Logik                           | 5–7 Tage          | M3                          |
-| M5  | Frontend (React)                              | 5–7 Tage          | M4 (parallel ab M3 möglich) |
-| M6  | Reporting & Export (PDF/CSV)                  | 3–4 Tage          | M4                          |
-| M7  | CI/CD, Deployment & E2E-Tests                 | 3–4 Tage          | M5, M6                      |
-| M8  | Design System — Hängt!-Marke                  | 3–5 Tage          | M5                          |
-| M9  | Allgemein-Konto & Mitglieder-Kategorien       | 3–5 Tage          | M4, M5                      |
-| M10 | Erweitertes Mitglieder-Profil (Bild & E-Mail) | 3–4 Tage          | M3, M5, M7                  |
-| M11 | Zeiger (Couleurbesuch & Verbindungsveranst.)  | 4–6 Tage          | M4, M5, M9                  |
-| M12 | Getränke-Kategorien & Verbrauchs-Auswertung   | 3–4 Tage          | M4, M5, M6                  |
-| M13 | Wirtschaftskommission & Konten-Streichung     | 2–3 Tage          | M4, M5, M9                  |
+| #   | Titel                                                    | Dauer (geschätzt) | Abhängigkeiten              |
+| --- | -------------------------------------------------------- | ----------------- | --------------------------- |
+| M1  | Projekt-Setup & Tooling                                  | 2–3 Tage          | —                           |
+| M2  | Datenbankschicht & Migrationen                           | 2–3 Tage          | M1                          |
+| M3  | Authentifizierung & Sicherheit                           | 3–4 Tage          | M2                          |
+| M4  | API / Backend-Logik                                      | 5–7 Tage          | M3                          |
+| M5  | Frontend (React)                                         | 5–7 Tage          | M4 (parallel ab M3 möglich) |
+| M6  | Reporting & Export (PDF/CSV)                             | 3–4 Tage          | M4                          |
+| M7  | CI/CD, Deployment & E2E-Tests                            | 3–4 Tage          | M5, M6                      |
+| M8  | Design System — Hängt!-Marke                             | 3–5 Tage          | M5                          |
+| M9  | Allgemein-Konto & Mitglieder-Kategorien                  | 3–5 Tage          | M4, M5                      |
+| M10 | Erweitertes Mitglieder-Profil (Bild & E-Mail)            | 3–4 Tage          | M3, M5, M7                  |
+| M11 | Zeiger (Couleurbesuch & Verbindungsveranst.)             | 4–6 Tage          | M4, M5, M9                  |
+| M12 | Getränke-Kategorien & Verbrauchs-Auswertung              | 3–4 Tage          | M4, M5, M6                  |
+| M13 | Wirtschaftskommission & Konten-Streichung                | 2–3 Tage          | M4, M5, M9                  |
+| M14 | Automatisches App-Update (2-Wochen-Timer + Admin-Button) | 4–6 Tage          | M3, M5, M7                  |
 
 ---
 
@@ -482,6 +483,76 @@ Dieser Plan unterteilt das Projekt in 10 aufeinander aufbauende Meilensteine. Je
 - [x] `CHANGELOG.md`, `MILESTONES.md`, `ARCHITECTURE.md`, `README.md` aktualisiert
 
 **Definition of Done:** Ein WK-Konto (und Admins) kann Mitglieder-Konten streichen und vorzeitig entstreichen. Auf ein gestrichenes Konto können 2 Wochen lang keine Getränke gebucht werden (Selbst- und Theken-Buchung), Zeiger-Buchungen bleiben möglich; nach Ablauf ist das Konto automatisch wieder bebuchbar. Gestrichene Konten erscheinen ausgeblichen in der Theken-Auswahl. Lint, Unit-, Integrations- und Komponententests grün.
+
+---
+
+## M14 — Automatisches App-Update (2-Wochen-Timer + Admin-Button)
+
+**Ziel:** Der Pi aktualisiert die App **alle zwei Wochen automatisch** auf das neueste stabile Release, ohne dass jemand einen Tag pusht oder sich per SSH anmeldet. Zusätzlich kann ein **Admin das Update jederzeit händisch anstoßen** und im Admin-Bereich sehen, welche Version läuft, ob eine neuere verfügbar ist und wie das letzte Update ausgegangen ist. Das Update ist so abgesichert wie der bestehende Tag-Deploy (DB-Backup, atomarer Symlink-Swap, Smoke-Test, automatischer Rollback).
+
+**Abhängigkeit:** M3 (Admin-Auth), M5 (Frontend/Admin-Bereich), M7 (Deploy-Pipeline, Release-Tarball, systemd-Service).
+
+### Festgelegte Entscheidungen
+
+- **Umfang: nur die App.** Aktualisiert werden Frontend + Backend. Betriebssystem-/`apt`-Updates des Pi bleiben bewusst außen vor (separate Pflege) — das hält den privilegierten Anteil klein und den Rollback berechenbar.
+- **Ziel: nur stabile Release-Tags.** Automatisch installiert wird ausschließlich das neueste `vX.Y.Z`-Release, das die Pipeline grün durchlaufen hat — nie ein ungetesteter `main`-Zwischenstand. Downgrades/Pinning sind über den automatischen Weg nicht möglich (Helper zielt immer auf „latest stable").
+- **Mechanismus: Pi-lokal, kein Cloud-Abruf durch die App.** Ein systemd-**Timer** (`getraenke-update.timer`) startet alle zwei Wochen einen **oneshot-Update-Service** (`getraenke-update.service`), der `scripts/pi-self-update.sh` ausführt. Nur dieser Helper spricht mit GitHub (Release-Abfrage + Tarball-Download). Die App selbst macht zur Laufzeit **keinen** ausgehenden Request — passt zum Grundsatz „keine Cloud, keine externen Laufzeit-Abhängigkeiten".
+- **Privilege-Separation für den Admin-Button.** Der `getraenke`-Service läuft weiter gehärtet und unprivilegiert (`NoNewPrivileges`, `ProtectSystem=strict`, kein sudo). Der Admin-Button **triggert das Update nicht selbst**, sondern legt nur eine **Marker-Datei** in das ohnehin beschreibbare `StateDirectory` (`/var/lib/getraenke/`). Eine system-seitige **`getraenke-update.path`-Unit** beobachtet diese Datei und startet den privilegierten Update-Service. So braucht die App **keinerlei** sudo-Rechte und kann kein beliebiges Kommando/keine beliebige Zielversion einschleusen — der Marker ist ein reines Signal, das Ziel („latest stable") bestimmt allein der Helper.
+- **Status-Rückkanal über Datei, nicht über GitHub.** Der Helper schreibt nach jedem Lauf `/var/lib/getraenke/update-status.json` (aktuelle Version, zuletzt bekannte verfügbare Version, Zeitpunkt der letzten Prüfung, Ergebnis des letzten Updates, `in_progress`-Flag). Der Admin-Bereich liest **nur diese Datei** — dadurch kennt die App die verfügbare Version, ohne selbst online zu gehen.
+- **Gemeinsame Pi-Release-Logik.** Die Pi-seitigen Deploy-Schritte (Tarball entpacken → `npm ci --omit=dev` → Migrationen → atomarer Swap → Restart → Smoke-Test → Rollback → Alt-Releases aufräumen) werden aus `deploy.yml` in ein wiederverwendbares Skript `scripts/pi-release.sh` gezogen. `deploy.yml` **und** `pi-self-update.sh` rufen dasselbe Skript auf — ein Update-Pfad, ein Rollback-Verhalten, kein Drift.
+- **Release-Tarball als GitHub-Release-Asset.** Damit der Pi „das neueste Release" ziehen kann, hängt `deploy.yml` den Build-Tarball zusätzlich als **Release-Asset** an das Tag (bisher nur flüchtiges Actions-Artefakt, 30 Tage). Da das Repo privat ist, liegt ein **read-only Fine-Grained-Token** (nur `contents:read`) auf dem Pi unter `/etc/getraenke/update.env` — nicht im App-Prozess, nur für den Helper lesbar.
+- **Zeitplan.** `OnCalendar=Mon *-*-01..07,15..21 03:30` (grob zweiwöchentlich, in der Nacht) mit `Persistent=true`, damit ein verpasster Lauf (Pi war aus) beim nächsten Start nachgeholt wird. Intervall/Uhrzeit sind in der Timer-Unit konfigurierbar.
+
+### PR 1 — Pi-Release-Logik extrahieren & Release-Asset
+
+- [x] `scripts/pi-release.sh` anlegen: nimmt `<tarball> <tag>`, führt Backup → Entpacken → `npm ci --omit=dev` → `deploy-migrate.sh` → atomarer Symlink-Swap → `systemctl restart` → Smoke-Test (`/api/v1/health`) → Rollback bei Fehler → Aufräumen (letzte 5 Releases) aus. Idempotent, `set -euo pipefail`, aussagekräftige Logs.
+- [x] `deploy.yml` refactoren: der Pi-`deploy`-Job ruft `pi-release.sh` statt der inline-Steps auf (Verhalten unverändert, nur zentralisiert). Tarball-Inhalt um `scripts/pi-release.sh` erweitert.
+- [x] `deploy.yml`: Schritt „GitHub-Release anlegen/aktualisieren + Tarball als Asset anhängen" (`softprops/action-gh-release`, für das gepushte Tag).
+- [x] **Tests:** `shellcheck` über `scripts/pi-release.sh` (in `ci.yml` eingehängt, `bash -n` deckte es über die bestehende Glob-Schleife bereits ab). Versions-/Vergleichslogik folgt in PR 2 (dort erst eingeführt).
+
+### PR 2 — Update-Helper, Timer & Path-Unit (Pi-seitig)
+
+- [x] `scripts/pi-self-update.sh`: liest `/etc/getraenke/update.env`, fragt das neueste stabile Release-Tag über die GitHub-API ab (`GET /repos/<owner>/<repo>/releases/latest`), vergleicht mit der aktiven Version (Symlink-Ziel), lädt bei Bedarf das private Release-Asset (authentifiziert über die API-`assets[].url`, nicht `browser_download_url`), ruft `pi-release.sh`, schreibt in **jedem** Fall `update-status.json` (Ergebnis: `up_to_date` | `update_available` | `in_progress` | `success` | `failed`, Zeitstempel, Versionen, Auslöser). Modus (nur prüfen vs. voll aktualisieren) wird über den Marker-Dateiinhalt gesteuert, nicht über einen CLI-Flag (siehe Marker-Handshake).
+- [x] `scripts/getraenke-update.service` (oneshot, läuft als root), `scripts/getraenke-update.timer` (`OnCalendar` grob 2-wöchentlich, `Persistent=true`) und `scripts/getraenke-update.path` (beobachtet `/var/lib/getraenke/update-requested`, `Unit=getraenke-update.service`).
+- [x] Marker-Handshake: Helper liest den Marker-Inhalt (`update`/`check`), konsumiert (löscht) ihn sofort, setzt `in_progress` in der Status-Datei vor dem Download, räumt danach auf. `flock` auf einer Lock-Datei verhindert parallele Läufe (Timer- und Admin-Trigger können sich sonst überschneiden).
+- [x] `scripts/update.env.example` + Fine-Grained-Token-Anleitung (`contents:read`, nur dieses Repo).
+- [x] **Tests:** `systemd-analyze verify` für Service/Timer/Path (lokal + `ci.yml`); Helper-Skript mit gestubbtem `curl` gegen Fixture-Responses manuell durchgetestet — Szenarien „bereits aktuell" (`up_to_date`), „Check-Marker mit neuerem Tag" (`update_available`, Marker korrekt konsumiert), „voller Update-Lauf inkl. Download + `pi-release.sh`" (inkl. eines erzwungenen Restart-Fehlers, der den automatischen Rollback in `pi-release.sh` korrekt auslöste und als `failed` protokolliert wurde) und „fehlende `update.env`" (Exit 1 mit klarer Fehlermeldung).
+
+### PR 3 — Backend: Status lesen & Update anstoßen
+
+- [x] `UpdateService`: liest `update-status.json` (robust bei fehlender/kaputter Datei/unbekanntem `last_result` → `unknown`), schreibt Marker `update-requested` (atomar via tmp+rename, Inhalt nur `"update"`/`"check"` — kein Payload, keine Zielversion), 409 (`UPDATE_IN_PROGRESS`) wenn `in_progress` oder bereits ein Marker offen ist.
+- [x] Routen (Admin-only, `requireRole('admin')`, gemountet unter `/api/v1/update` statt `/api/v1/admin/update` — folgt der bestehenden flachen Ressourcen-Konvention des Repos, z. B. `/api/v1/reports`): `GET /update/status` (aktuelle Version, verfügbare Version, letzte Prüfung, letztes Ergebnis, `in_progress`) und `POST /update` (setzt Marker → 202; 409 wenn bereits offen/`in_progress`). `POST /update/check` (Marker-Inhalt `"check"`) umgesetzt statt eines optionalen CLI-Flags — passt zum Marker-Design aus PR 2.
+- [x] Konfiguration: ENV `UPDATE_STATE_DIR` (Dev: `./data`, Prod: `/var/lib/getraenke`, muss mit dem StateDirectory des Pi-Helpers übereinstimmen), Pfade für Marker/Status daraus abgeleitet.
+- [x] Audit-Log: `update_requested` mit `actor_id` und `meta.mode` (`update`/`check`).
+- [ ] `/api/v1/health` optional um `version` ergänzen — zurückgestellt (optional laut Plan, kein Bedarf für den Admin-Bereich, der `GET /update/status.current_version` ohnehin liefert).
+- [x] **Tests:** Supertest (`tests/integration/update.test.ts`) — `GET /update/status` (200 Admin inkl. „unknown" ohne Datei, 403 Member, 401 ohne Token), `POST /update`/`POST /update/check` (202, Marker-Inhalt geprüft, 409 bei offenem Marker, 409 bei `in_progress`-Status, 403 Member); Vitest (`tests/unit/services/UpdateService.test.ts`, 9 Tests) — Status-Parsing (fehlende/kaputte/unbekannte Datei), Marker-Schreiben, Debounce, Audit-Log-Eintrag, Auto-Anlage des State-Verzeichnisses. Gesamte Backend-Suite (345 Tests) grün, Coverage-Ratchet weiterhin erfüllt.
+
+### PR 4 — Frontend: Admin-Bereich „System / Update“
+
+- [x] Neuer Admin-Reiter **„System"** (`/admin/system`, `SystemPage.tsx`): zeigt Badge mit dem aktuellen Ergebnis (u. a. „Aktuell"/„Update verfügbar"/„Noch kein Update-Lauf"), **laufende Version**, **verfügbare Version**, Zeitpunkt der letzten Prüfung inkl. Auslöser (automatisch/manuell).
+- [x] Buttons **„Jetzt prüfen"** und **„Jetzt aktualisieren"** (Bestätigungsdialog mit Hinweis auf den kurzen Neustart); solange `in_progress` true ist, pollt die Seite `GET /update/status` alle 4 s und zeigt bei Abschluss automatisch einen Erfolgs-/Fehler-Toast. Beide Buttons sind deaktiviert, während ein Lauf aktiv ist oder eine Anfrage unterwegs ist.
+- [x] `updateApi.getStatus()` / `requestUpdate()` / `requestCheck()` (`frontend/src/api/update.ts`); 409 `UPDATE_IN_PROGRESS` wird als verständliche Meldung angezeigt statt als Rohfehler.
+- [x] Konsistent mit Hängt!-Tokens (Pergament-Karte mit Korps-Rot-Topstreifen, Eyebrow-Section-Title, bestehende Button-/Badge-Farbpalette) — kein neuer visueller Stil, manuell im Browser gegen den laufenden Dev-Server geprüft (Screenshots: Status „unbekannt", „Update verfügbar", 409-Fehlertoast, Bestätigungsdialog).
+- [x] **Tests:** Vitest + RTL (`tests/SystemPage.test.tsx`, 7 Tests) — Rendering „Noch kein Update-Lauf" vs. Versionen/„Update verfügbar", „Jetzt prüfen" ruft die API, „Jetzt aktualisieren" fragt erst per `confirm()` und bricht bei Ablehnung ab, 409-Fehlerfall zeigt die verständliche Meldung, beide Buttons deaktiviert bei `in_progress`. Gesamte Frontend-Suite (102 Tests) grün.
+
+### PR 5 — E2E & Doku
+
+- [x] Playwright-E2E (`e2e/tests/09-admin-update.spec.ts`): Login als Admin → Update-Bereich zeigt aktuelle Version → „Jetzt aktualisieren" schreibt die Marker-Datei (Status-Datei wird direkt in `UPDATE_STATE_DIR` vorgelegt, keine echte Installation im Test-Setup) → UI spiegelt Ergebnis; Abbruch über den Bestätigungsdialog schreibt keinen Marker; Nicht-Admin wird von `/admin/system` weg auf `/buchen` umgeleitet. `global-setup.ts`/`global-teardown.ts` um ein isoliertes `UPDATE_STATE_DIR` erweitert (fester Pfad, unabhängig von Spec-Worker-Prozessen berechenbar — analog zu `E2E_BACKEND_PORT`).
+- [x] `docs/AUTO-UPDATE.md` (bereits in PR 2 angelegt): Architektur (Timer → Path-Unit → Helper → `pi-release.sh`), Installation der Units, Token-Setup, Sicherheitsüberlegungen, manuelles Prüfen/Anstoßen, Störungssuche.
+- [x] `docs/DEPLOYMENT.md` (PR 1/2) und `docs/RASPBERRY-PI-SETUP.md` (PR 2) bereits verlinkt bzw. um Schritt 10 (Units + `update.env`) ergänzt.
+- [x] `ARCHITECTURE.md`: neuer Abschnitt „Auto-Update & Privilege-Separation (M14)" (App schreibt nur die Marker-Datei, root-betriebene Path-Unit/Service übernehmen den Rest, Status-Datei-Rückkanal, `UPDATE_STATE_DIR`, Token-Scope) sowie die drei `/update`-Routen in der API-Übersicht.
+- [x] `CHANGELOG.md` (Unreleased, PR 1–4) und `README.md`-Feature-Liste (PR 4) bereits ergänzt.
+- [x] **Nebenbei behoben:** Beim Schreiben des E2E-Tests fiel auf, dass die Seite auf schmalen Viewports (Sticky-Header oben, `position: fixed`-TabBar unten) beim automatischen Scrollen Ziel-Elemente teils unter den fixierten Leisten verschwinden lässt (`scrollIntoView` kennt `position: sticky`/`fixed`-Overlays nicht). `frontend/src/index.css` um `scroll-padding-top`/`scroll-padding-bottom` ergänzt — ein generischer, vorher latenter Bug, den die neue (weiter unten liegende) System-Seite als Erste sichtbar gemacht hat.
+
+### Sicherheits- & Betriebs-Hinweise (bei der Umsetzung beachten)
+
+- **Vertrauensanker Release:** Der Helper installiert nur Assets aus **unserem** Repo/Tag. Optional (späterer Ausbau): Checksum-/Signatur-Prüfung des Tarballs vor dem Entpacken.
+- **Kein beliebiges Ziel aus der App:** Der Marker enthält keine Versionsangabe; die App kann so kein Downgrade/keine fremde Version erzwingen.
+- **Restart-Fenster:** Ein Update startet den Dienst kurz neu (wenige Sekunden). Der nächtliche Timer minimiert die Störung; der Admin-Button warnt vor.
+- **Rollback:** Schlägt der Smoke-Test fehl, swappt `pi-release.sh` automatisch auf das vorherige Release zurück (identisch zum bestehenden Tag-Deploy).
+- **Token-Scope:** Fine-Grained-PAT strikt auf dieses Repo + `contents:read`; nur für den Helper (root/deploy-Kontext) lesbar, **nie** im `getraenke`-App-Prozess.
+
+**Definition of Done:** Ohne manuellen Tag-Push zieht der Pi zweiwöchentlich automatisch das neueste stabile Release, sichert vorher die DB, swappt atomar und rollt bei fehlgeschlagenem Smoke-Test selbsttätig zurück. Ein Admin sieht im Admin-Bereich die laufende und die verfügbare Version und kann per Button „Jetzt prüfen" bzw. „Jetzt aktualisieren" auslösen; der Anstoß erfolgt über eine Marker-Datei ohne jegliche sudo-Rechte im App-Prozess. Die App macht selbst keinen Netzabruf zu GitHub. Lint (inkl. `shellcheck`), `systemd-analyze verify`, Unit-, Integrations- und E2E-Tests grün.
 
 ---
 

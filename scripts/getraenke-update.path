@@ -1,0 +1,21 @@
+# scripts/getraenke-update.path
+#
+# Beobachtet die Marker-Datei, die der Admin-Bereich der App schreibt
+# (POST /admin/update bzw. /admin/update/check — siehe MILESTONES.md, M14
+# PR 3), und startet dann getraenke-update.service. Der App-Prozess selbst
+# stößt das Update NICHT direkt an — er hat kein sudo und keinen Zugriff auf
+# systemd. Diese Path-Unit ist der einzige Übergang von „unprivilegiert" zu
+# „privilegiert" und wird von systemd (root) verwaltet, nicht von der App.
+#
+# Installation: siehe Kommentar-Header in scripts/getraenke-update.service.
+
+[Unit]
+Description=Beobachtet Update-Anfragen des Admin-Bereichs (Hängt!)
+Documentation=https://github.com/gesellc90/haengt/blob/main/docs/AUTO-UPDATE.md
+
+[Path]
+PathExists=/var/lib/getraenke/update-requested
+Unit=getraenke-update.service
+
+[Install]
+WantedBy=multi-user.target

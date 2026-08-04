@@ -15,6 +15,13 @@ html {
   /* Verhindert Font-Boosting auf mobilen Browsern */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* WordmarkHeader ist `position: sticky` (~73px hoch). Ohne scroll-padding
+     scrollt der Browser Ziele (Anker-Links, scrollIntoView, Tastatur-Fokus)
+     nur so weit, dass sie knapp unter dem Header verschwinden. */
+  scroll-padding-top: 80px;
+  /* Bottom-TabBar (Layout.tsx) ist auf Mobile `position: fixed`, 72px hoch
+     (siehe dortiger Platzhalter-Div) — gleiches Problem am unteren Rand. */
+  scroll-padding-bottom: 80px;
 }
 
 body {

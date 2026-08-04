@@ -23,7 +23,7 @@
  */
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -38,11 +38,19 @@ const BACKEND_PORT = Number(process.env['E2E_BACKEND_PORT'] ?? 3101);
 const FRONTEND_PORT = Number(process.env['E2E_FRONTEND_PORT'] ?? 4173);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const FRONTEND_URL = `http://127.0.0.1:${FRONTEND_PORT}`;
+// Fester Pfad (kein mkdtemp-Zufallssuffix wie bei tmpDir): Spec-Dateien laufen
+// in eigenen Worker-Prozessen und können `globalThis.__E2E__` aus diesem
+// Setup-Prozess nicht lesen — sie berechnen denselben Pfad unabhängig über
+// denselben Fallback (analog zu E2E_BACKEND_PORT/E2E_FRONTEND_PORT), um vor
+// dem Update-Test eine `update-status.json` vorzulegen.
+const UPDATE_STATE_DIR =
+  process.env['E2E_UPDATE_STATE_DIR'] ?? path.join(tmpdir(), 'getraenke-e2e-update-state');
 
 export interface E2EHandle {
   tmpDir: string;
   dbPath: string;
   jwtSecret: string;
+  updateStateDir: string;
   backend: ChildProcess;
   frontend: ChildProcess;
   backendUrl: string;
@@ -86,6 +94,10 @@ export default async function globalSetup(): Promise<void> {
   const dbPath = path.join(tmpDir, 'getraenke.db');
   const jwtSecret = randomBytes(32).toString('hex'); // 64 Zeichen
 
+  // Für den Auto-Update-Rückkanal (M14): Verzeichnis muss existieren, bevor
+  // Specs eine update-status.json hineinschreiben können.
+  mkdirSync(UPDATE_STATE_DIR, { recursive: true });
+
   const childEnv: NodeJS.ProcessEnv = {
     ...process.env,
     NODE_ENV: 'production',
@@ -94,6 +106,7 @@ export default async function globalSetup(): Promise<void> {
     JWT_SECRET: jwtSecret,
     JWT_EXPIRES_IN: '8h',
     LOG_LEVEL: 'warn',
+    UPDATE_STATE_DIR,
     // Rate-Limiter deaktivieren: alle E2E-Requests kommen von 127.0.0.1
     // und würden nach 5 Logins den gemeinsamen Bucket erschöpfen.
     DISABLE_RATE_LIMIT: 'true',
@@ -148,6 +161,7 @@ export default async function globalSetup(): Promise<void> {
     tmpDir,
     dbPath,
     jwtSecret,
+    updateStateDir: UPDATE_STATE_DIR,
     backend,
     frontend,
     backendUrl: BACKEND_URL,
@@ -161,6 +175,7 @@ export default async function globalSetup(): Promise<void> {
       if (!backend.killed) backend.kill('SIGTERM');
       if (!frontend.killed) frontend.kill('SIGTERM');
       rmSync(tmpDir, { recursive: true, force: true });
+      rmSync(UPDATE_STATE_DIR, { recursive: true, force: true });
     } catch {
       /* best effort */
     }

@@ -5,17 +5,14 @@
 # Ablauf (siehe docs/DEPLOYMENT.md):
 #   build:  Frontend + Backend frisch bauen, Tarball mit dist + Source-Manifests
 #           hochladen. better-sqlite3 wird im deploy-Job auf ARM neu kompiliert.
-#   deploy: Auf Pi via self-hosted Runner:
-#             1) Aktuellen Symlink für Rollback merken
-#             2) DB-Backup nach /var/backups/getraenke/<tag>-<ts>.sqlite
-#             3) Release-Verzeichnis anlegen, Tarball entpacken
-#             4) `npm ci --omit=dev` (kompiliert better-sqlite3 nativ)
-#             5) Migrationen ausführen (als App-User getraenke)
-#             6) Symlink atomar swappen
-#             7) Service neu starten (sudo systemctl restart)
-#             8) Smoke-Test gegen /api/v1/health (5× retry)
-#             9) Bei Fehler NACH Swap: Rollback auf vorherigen Symlink + Restart
-#            10) Aufräumen: letzte 5 Releases behalten
+#           Zusätzlich wird der Tarball als Release-Asset an das Tag angehängt,
+#           damit der Auto-Update-Helper auf dem Pi (M14) ihn ohne
+#           Actions-Zugriff herunterladen kann.
+#   deploy: Auf Pi via self-hosted Runner ruft `scripts/pi-release.sh` auf
+#           (Backup, Entpacken, npm ci, Migrationen, atomarer Symlink-Swap,
+#           Neustart, Smoke-Test, Rollback bei Fehler, Aufräumen — siehe
+#           Kommentar-Header dort). Derselbe Skript-Pfad wird vom
+#           Auto-Update-Helper (scripts/pi-self-update.sh) wiederverwendet.
 
 name: Deploy
 
@@ -47,6 +44,8 @@ jobs:
   build:
     name: Build (ubuntu-latest)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # nötig für den Release-Asset-Upload weiter unten
     outputs:
       artifact-name: ${{ steps.pack.outputs.artifact-name }}
     steps:
@@ -83,7 +82,9 @@ jobs:
             frontend/dist \
             package.json \
             package-lock.json \
-            scripts/deploy-migrate.sh
+            scripts/deploy-migrate.sh \
+            scripts/pi-release.sh \
+            scripts/pi-self-update.sh
           ls -lh "$NAME"
           echo "artifact-name=$NAME" >> "$GITHUB_OUTPUT"
 
@@ -94,6 +95,18 @@ jobs:
           path: ${{ steps.pack.outputs.artifact-name }}
           if-no-files-found: error
           retention-days: 30
+
+      - name: Als GitHub-Release-Asset veröffentlichen
+        # Macht den Tarball unabhängig von der 30-Tage-Actions-Artefakt-Retention
+        # dauerhaft abrufbar — Voraussetzung für den Pi-lokalen Auto-Update-Helper
+        # (scripts/pi-self-update.sh, M14), der Actions-Artefakte nicht ohne
+        # Weiteres herunterladen kann, wohl aber Release-Assets.
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: ${{ steps.pack.outputs.artifact-name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
 
   # ---------------------------------------------------------------------------
   # 2) Deploy auf den Pi. Läuft als Runner-User getraenke-runner (siehe
@@ -119,129 +132,13 @@ jobs:
           name: ${{ env.ARTIFACT }}
           path: /tmp/deploy
 
-      - name: Aktuellen Symlink-Stand merken (Rollback-Anker)
-        id: snapshot
-        run: |
-          set -euo pipefail
-          if [[ -L "$CURRENT_LINK" ]]; then
-            PREVIOUS=$(readlink -f "$CURRENT_LINK")
-          else
-            PREVIOUS=""
-          fi
-          echo "previous=$PREVIOUS" >> "$GITHUB_OUTPUT"
-          echo "Vorheriges Release: ${PREVIOUS:-<keines (Initial-Deploy)>}"
+      - name: pi-release.sh aus dem Tarball ziehen
+        # Das Skript selbst steckt im Tarball (es entpackt sich also gewissermaßen
+        # selbst) — wir brauchen einen ausführbaren Erststand, bevor es den Rest
+        # (inkl. sich selbst) ins Release-Verzeichnis entpackt.
+        run: tar -xzf "/tmp/deploy/$ARTIFACT" -C /tmp/deploy scripts/pi-release.sh
 
-      - name: DB-Backup
-        run: |
-          set -euo pipefail
-          mkdir -p "$BACKUP_DIR"
-          if [[ ! -f "$DB_PATH" ]]; then
-            echo "Keine bestehende DB unter $DB_PATH — überspringe Backup."
-            exit 0
-          fi
-          STAMP=$(date -u +"%Y%m%dT%H%M%SZ")
-          DEST="$BACKUP_DIR/$TAG-$STAMP.sqlite"
-          # Hot-Backup via SQLite-eigene API (WAL-sicher, weiter beschreibbar).
-          sqlite3 "$DB_PATH" ".backup '$DEST'"
-          echo "Backup: $DEST ($(du -h "$DEST" | cut -f1))"
-
-      - name: Release entpacken
-        id: release
-        run: |
-          set -euo pipefail
-          RELEASE_DIR="$RELEASES_DIR/$TAG"
-          if [[ -d "$RELEASE_DIR" ]]; then
-            echo "Release-Verzeichnis existiert (Re-Deploy) — entferne es."
-            rm -rf "$RELEASE_DIR"
-          fi
-          mkdir -p "$RELEASE_DIR"
-          tar -xzf "/tmp/deploy/$ARTIFACT" -C "$RELEASE_DIR"
-          chmod +x "$RELEASE_DIR/scripts/deploy-migrate.sh"
-          echo "release-dir=$RELEASE_DIR" >> "$GITHUB_OUTPUT"
-
-      - name: Produktions-Dependencies installieren (better-sqlite3 ARM-Build)
-        working-directory: ${{ steps.release.outputs.release-dir }}
-        run: npm ci --omit=dev --workspace=backend --include-workspace-root=false
-
-      - name: Migrationen ausführen (als App-User getraenke)
-        run: ${{ steps.release.outputs.release-dir }}/scripts/deploy-migrate.sh ${{ steps.release.outputs.release-dir }}
-
-      - name: Symlink atomar swappen
-        id: swap
-        run: |
-          set -euo pipefail
-          NEW_LINK="$CURRENT_LINK.new"
-          ln -sfn "${{ steps.release.outputs.release-dir }}" "$NEW_LINK"
-          # `mv -T` ist atomic-rename und dereferenziert den Symlink nicht.
-          mv -Tf "$NEW_LINK" "$CURRENT_LINK"
-          echo "swapped=true" >> "$GITHUB_OUTPUT"
-          echo "Symlink: $CURRENT_LINK → $(readlink -f "$CURRENT_LINK")"
-
-      - name: Service neu starten
-        run: |
-          set -euo pipefail
-          sudo /usr/bin/systemctl restart getraenke.service
-          for i in 1 2 3 4 5; do
-            if sudo /usr/bin/systemctl is-active --quiet getraenke.service; then
-              echo "Service aktiv (Versuch $i)."
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Service nicht aktiv nach 10 s." >&2
-          exit 1
-
-      - name: Smoke-Test (/api/v1/health)
-        id: smoke
-        run: |
-          set -euo pipefail
-          for i in 1 2 3 4 5; do
-            if curl -fsS --max-time 10 "$HEALTH_URL" > /tmp/health.json; then
-              echo "Health-Check OK (Versuch $i):"
-              cat /tmp/health.json
-              exit 0
-            fi
-            echo "Versuch $i fehlgeschlagen, retry in 2 s …"
-            sleep 2
-          done
-          echo "Smoke-Test fehlgeschlagen nach 5 Versuchen." >&2
-          exit 1
-
-      - name: Rollback bei Deploy-Fehler nach Symlink-Swap
-        if: failure() && steps.swap.outputs.swapped == 'true'
-        env:
-          PREVIOUS: ${{ steps.snapshot.outputs.previous }}
-        run: |
-          set -euo pipefail
-          if [[ -z "$PREVIOUS" ]]; then
-            echo "Kein vorheriges Release vorhanden — manueller Eingriff nötig." >&2
-            exit 1
-          fi
-          echo "ROLLBACK auf $PREVIOUS"
-          ln -sfn "$PREVIOUS" "$CURRENT_LINK.rollback"
-          mv -Tf "$CURRENT_LINK.rollback" "$CURRENT_LINK"
-          sudo /usr/bin/systemctl restart getraenke.service
-          echo "Rollback abgeschlossen — Workflow wird trotzdem rot abgeschlossen."
-          exit 1
-
-      - name: Alte Releases aufräumen (letzte 5 behalten)
-        if: success()
-        run: |
-          set -euo pipefail
-          cd "$RELEASES_DIR"
-          KEEP=5
-          ACTIVE=$(basename "$(readlink -f "$CURRENT_LINK")")
-          mapfile -t OLD < <(ls -1dt v*/ 2>/dev/null | tail -n +$((KEEP + 1)))
-          if [[ ${#OLD[@]} -eq 0 ]]; then
-            echo "Nichts zu löschen — ≤ $KEEP Releases vorhanden."
-            exit 0
-          fi
-          for d in "${OLD[@]}"; do
-            name="${d%/}"
-            if [[ "$name" == "$ACTIVE" ]]; then
-              echo "Übersprungen (= aktiv): $name"
-              continue
-            fi
-            echo "Lösche altes Release: $name"
-            rm -rf "${RELEASES_DIR:?}/$name"
-          done
+      - name: Release installieren (Backup, Swap, Migrationen, Smoke-Test, Rollback)
+        # BACKUP_DIR und HEALTH_URL kommen aus dem workflow-weiten env-Block oben;
+        # RELEASES_DIR, CURRENT_LINK, DB_PATH aus dem job-weiten env-Block.
+        run: /tmp/deploy/scripts/pi-release.sh "/tmp/deploy/$ARTIFACT" "$TAG"

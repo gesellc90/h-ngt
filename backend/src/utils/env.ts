@@ -17,6 +17,13 @@ const envSchema = z.object({
   /** Verzeichnis für Profilbilder. Wird beim Start angelegt wenn nicht vorhanden. */
   AVATAR_DIR: z.string().default('./data/avatars'),
   /**
+   * Verzeichnis für den Auto-Update-Rückkanal (M14): `update-status.json`
+   * (vom Pi-Helper geschrieben) und `update-requested` (Marker-Datei, von
+   * dieser App geschrieben). Muss auf dem Pi mit dem StateDirectory des
+   * Helpers übereinstimmen (`/var/lib/getraenke`) — siehe docs/AUTO-UPDATE.md.
+   */
+  UPDATE_STATE_DIR: z.string().default('./data'),
+  /**
    * Anzahl vertrauenswürdiger Reverse-Proxy-Hops vor der App (Express `trust proxy`).
    * 0 = kein Proxy (Default, sicher). Hinter Caddy/nginx auf `1` setzen, damit das
    * Rate-Limiting die echte Client-IP statt der Proxy-IP sieht. NICHT auf > 0
