@@ -50,10 +50,10 @@ jobs:
       artifact-name: ${{ steps.pack.outputs.artifact-name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Node ${{ env.NODE_VERSION }} einrichten
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -89,7 +89,7 @@ jobs:
           echo "artifact-name=$NAME" >> "$GITHUB_OUTPUT"
 
       - name: Artefakt hochladen
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.pack.outputs.artifact-name }}
           path: ${{ steps.pack.outputs.artifact-name }}

@@ -32,10 +32,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Node ${{ env.NODE_VERSION }} einrichten
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -46,7 +46,7 @@ jobs:
 
       - name: Playwright-Browser cachen
         id: pw-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ hashFiles('e2e/package.json', 'package-lock.json') }}
@@ -74,7 +74,7 @@ jobs:
 
       - name: Playwright-Report hochladen
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ github.run_id }}
           path: e2e/playwright-report
@@ -83,7 +83,7 @@ jobs:
 
       - name: Trace + Screenshots bei Fehler hochladen
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-results-${{ github.run_id }}
           path: e2e/test-results
