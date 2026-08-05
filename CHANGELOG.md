@@ -9,6 +9,34 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- _Noch nichts Neues_
+
+### Changed
+
+- _Noch keine Änderungen_
+
+### Deprecated
+
+- _Noch nichts deprecatet_
+
+### Removed
+
+- _Noch nichts entfernt_
+
+### Fixed
+
+- _Noch keine Fixes_
+
+### Security
+
+- _Keine sicherheitsrelevanten Änderungen bisher_
+
+---
+
+## [0.2.0] - 2026-08-05
+
+### Added
+
 - **M14 (PR 5) — E2E-Test & Doku-Abschluss**
   - Playwright-E2E (`09-admin-update.spec.ts`): Update-Status inkl. Versionen anzeigen, „Jetzt aktualisieren" schreibt die Marker-Datei, Dialog-Abbruch schreibt keinen Marker, Nicht-Admin wird umgeleitet. `global-setup.ts` legt dafür ein isoliertes `UPDATE_STATE_DIR` für den E2E-Backend-Prozess an.
   - `ARCHITECTURE.md`: neuer Abschnitt „Auto-Update & Privilege-Separation" sowie die `/update`-Routen in der API-Übersicht.
@@ -199,5 +227,6 @@ Vorlage für neue Releases:
 - ...
 -->
 
-[Unreleased]: https://github.com/gesellc90/h-ngt/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/gesellc90/h-ngt/releases/tag/v0.1.0
+[Unreleased]: https://github.com/gesellc90/haengt/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/gesellc90/haengt/compare/v0.1.3...v0.2.0
+[0.1.0]: https://github.com/gesellc90/haengt/releases/tag/v0.1.0
