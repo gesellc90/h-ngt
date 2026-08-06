@@ -101,7 +101,7 @@ jobs:
         # dauerhaft abrufbar — Voraussetzung für den Pi-lokalen Auto-Update-Helper
         # (scripts/pi-self-update.sh, M14), der Actions-Artefakte nicht ohne
         # Weiteres herunterladen kann, wohl aber Release-Assets.
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           files: ${{ steps.pack.outputs.artifact-name }}
