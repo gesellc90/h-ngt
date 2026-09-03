@@ -19,10 +19,17 @@
 #
 # Deshalb braucht der Runner nur sudo für:
 #   1) Service-Lifecycle (systemctl restart/status/is-active)
-#   2) DB-Migration als App-User getraenke (Schreibzugriff auf die DB)
+#   2) StateDirectory (/var/lib/getraenke) idempotent anlegen — nötig für den
+#      allerersten Deploy auf einem frischen Host, bevor der Service je
+#      gestartet wurde (systemd StateDirectory= legt es sonst erst beim
+#      ersten Service-Start an, siehe scripts/pi-release.sh).
+#   3) DB-Migration als App-User getraenke (Schreibzugriff auf die DB)
+#   4) DB-Backup (sqlite3 .backup) als App-User getraenke — sqlite3 braucht
+#      Schreibzugriff auf das Quellverzeichnis für seine Lock-/Journal-Datei,
+#      den der Runner absichtlich nicht hat (siehe Zeile 17f. oben).
 #
-# Symlink-Swap, Tarball-Extract und sqlite3 .backup laufen OHNE sudo, weil
-# der Runner selbst Eigentümer der relevanten Verzeichnisse ist.
+# Symlink-Swap und Tarball-Extract laufen OHNE sudo, weil der Runner selbst
+# Eigentümer der relevanten Verzeichnisse ist.
 
 # `requiretty` würde non-interaktive sudo-Aufrufe blockieren.
 Defaults:getraenke-runner   !requiretty
@@ -37,11 +44,21 @@ Cmnd_Alias GETRAENKE_SVC = /usr/bin/systemctl restart getraenke.service, \
                            /usr/bin/systemctl is-active getraenke.service, \
                            /usr/bin/systemctl is-active --quiet getraenke.service
 
+# Cmnd-Alias, um das StateDirectory idempotent anzulegen — komplett fest
+# verdrahtet, keine Wildcards, da es keinen legitimen Grund gibt, hierüber
+# einen anderen Pfad/Owner/Mode anzulegen.
+Cmnd_Alias GETRAENKE_STATEDIR = /usr/bin/install -d -m 0750 -o getraenke -g getraenke /var/lib/getraenke
+
 # Cmnd-Alias für Migration — Wildcard nur für den Tag-Anteil im Pfad.
 # WICHTIG: ohne Wildcard bei `env`, sonst kann ein bösartiger Runner-Job
 # beliebige Env-Variablen einschmuggeln. Wir whitelisten die Env-Keys hart.
 Cmnd_Alias GETRAENKE_MIGRATE = /usr/bin/env NODE_ENV=* DB_PATH=* JWT_SECRET=* JWT_EXPIRES_IN=* LOG_LEVEL=* PORT=* /usr/bin/node /opt/getraenke/releases/*/backend/dist/db/migrate-cli.js
 
+# Cmnd-Alias für DB-Backup — Pfad zur DB-Datei fest verdrahtet, Wildcard nur
+# auf das sqlite3-Dot-Command selbst (Zieldateiname enthält einen
+# UTC-Zeitstempel und ist daher nicht vorhersagbar).
+Cmnd_Alias GETRAENKE_BACKUP = /usr/bin/sqlite3 /var/lib/getraenke/getraenke.db .backup*
+
 # Regeln.
-getraenke-runner ALL=(root)      NOPASSWD: GETRAENKE_SVC
-getraenke-runner ALL=(getraenke) NOPASSWD: GETRAENKE_MIGRATE
+getraenke-runner ALL=(root)      NOPASSWD: GETRAENKE_SVC, GETRAENKE_STATEDIR
+getraenke-runner ALL=(getraenke) NOPASSWD: GETRAENKE_MIGRATE, GETRAENKE_BACKUP

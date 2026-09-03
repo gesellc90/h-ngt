@@ -123,11 +123,19 @@ sudo install -d -m 0775 -o getraenke-runner -g getraenke /opt/getraenke/releases
 sudo install -d -m 0775 -o getraenke-runner -g getraenke /var/backups/getraenke
 ```
 
-Der Runner braucht **NOPASSWD-sudo** für genau drei Befehle:
+Der Runner braucht **NOPASSWD-sudo** für genau vier Zwecke:
 
 - `systemctl restart getraenke.service`
 - `systemctl status getraenke.service`
+- StateDirectory `/var/lib/getraenke` idempotent anlegen (`install -d …`) —
+  nötig für den allerersten Deploy auf einem frischen Host, bevor der
+  Service je gestartet wurde (systemd `StateDirectory=` legt es sonst erst
+  beim ersten Service-Start an).
 - DB-Migration als App-User `getraenke` (`sudo -u getraenke … migrate-cli.js`)
+- DB-Backup als App-User `getraenke` (`sudo -u getraenke sqlite3 … .backup …`)
+  — der Runner selbst hat auf `/var/lib/getraenke` bewusst nur Lesezugriff,
+  `sqlite3 .backup` braucht aber Schreibzugriff auf das Quellverzeichnis für
+  seine Lock-/Journal-Datei.
 
 Die Datei `scripts/getraenke-deploy.sudoers` enthält das passende Snippet —
 keine Wildcards außerhalb des Tag-Anteils im Release-Pfad, kein freies `env`:

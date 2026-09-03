@@ -25,7 +25,20 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
-- _Noch keine Fixes_
+- **`scripts/pi-release.sh`**: Der DB-Backup-Schritt (`sqlite3 .backup`) lief
+  als `getraenke-runner`, der auf `/var/lib/getraenke` absichtlich nur
+  Lesezugriff hat — sqlite3 braucht für `.backup` aber Schreibzugriff auf das
+  Quellverzeichnis (Lock-/Journal-Datei), nicht nur auf die DB-Datei. Das
+  ließ jeden Deploy mit bereits vorhandener DB mit
+  `Error: attempt to write a readonly database` scheitern. Backup läuft jetzt
+  als App-User `getraenke` (neue sudoers-Regel `GETRAENKE_BACKUP`).
+- **`scripts/pi-release.sh`**: Initial-Deploy auf einem frischen Host scheiterte
+  in der Migration mit `EACCES: permission denied, mkdir '/var/lib/getraenke'`,
+  weil dieses Verzeichnis normalerweise erst durch systemds
+  `StateDirectory=getraenke` beim ersten Service-Start angelegt wird — der
+  Service läuft zu diesem Zeitpunkt im Deploy-Ablauf aber noch nie. Das
+  Skript legt das Verzeichnis jetzt vorher selbst idempotent an (neue
+  sudoers-Regel `GETRAENKE_STATEDIR`).
 
 ### Security
 
