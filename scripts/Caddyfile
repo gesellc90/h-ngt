@@ -1,0 +1,21 @@
+# scripts/Caddyfile
+#
+# Optionaler Reverse-Proxy fuer den freundlichen mDNS-Hostnamen
+# http://haengt.local (statt http://<pi-ip>:3001). Die App selbst bleibt
+# unveraendert auf Port 3001 erreichbar - dieser Proxy ist ein zusaetzlicher,
+# bequemerer Zugang, kein Ersatz.
+#
+# "http://" vor dem Hostnamen weist Caddy explizit an, KEIN Automatic-HTTPS
+# (ACME) zu versuchen - fuer eine .local-Adresse gibt es kein oeffentliches
+# Zertifikat und keinen Sinn darin, es zu versuchen.
+#
+# Installation (siehe docs/RASPBERRY-PI-SETUP.md, Schritt 11):
+#   sudo cp scripts/Caddyfile /etc/caddy/Caddyfile
+#   sudo systemctl restart caddy
+#
+# Voraussetzung: avahi-daemon laeuft und der System-Hostname ist "haengt"
+# (siehe Schritt 11) - sonst loest haengt.local bei niemandem im LAN auf.
+
+http://haengt.local {
+	reverse_proxy localhost:3001
+}

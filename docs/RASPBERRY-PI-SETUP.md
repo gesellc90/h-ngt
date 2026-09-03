@@ -269,6 +269,56 @@ Voraussetzung: mindestens ein Tag-Deploy muss bereits gelaufen sein
 (`/opt/getraenke/current` muss existieren — der Helper liegt selbst im
 Release-Tarball unter `scripts/pi-self-update.sh`).
 
+## Schritt 11 — Freundlicher Hostname (mDNS + Reverse-Proxy)
+
+Optional, aber empfohlen: statt `http://<pi-ip>:3001` soll die App im
+Vereins-LAN unter `http://haengt.local` erreichbar sein — ohne Port, per
+mDNS aufgelöst. Zwei Bausteine: `avahi-daemon` veröffentlicht den
+Hostnamen, `Caddy` proxied Port 80 → 3001.
+
+```bash
+# 1) Hostname setzen (falls noch nicht "haengt")
+sudo hostnamectl set-hostname haengt
+sudo sed -i "s/127.0.1.1.*/127.0.1.1\thaengt/" /etc/hosts
+
+# 2) avahi-daemon (mDNS-Responder)
+sudo apt-get install -y avahi-daemon
+sudo systemctl enable --now avahi-daemon
+sudo ufw allow 5353/udp comment 'mDNS'
+
+# 3) Caddy (Reverse-Proxy, offizielles Debian-Repo)
+sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt-get update
+sudo apt-get install -y caddy
+
+# 4) scripts/Caddyfile installieren
+sudo cp scripts/Caddyfile /etc/caddy/Caddyfile
+sudo ufw allow 80/tcp comment 'Caddy (haengt.local)'
+sudo systemctl restart caddy
+```
+
+Test vom Vereins-LAN aus (Mac/iOS lösen `.local` nativ per Bonjour auf,
+die meisten Linux-Distros über `nss-mdns`):
+
+```bash
+curl -fsS http://haengt.local/api/v1/health
+```
+
+> **Windows-Hinweis:** Windows löst `.local`-Namen ohne zusätzliche
+> Software (z. B. Apple „Bonjour Print Services") oft nicht auf. Das iPad
+> im Schankraum (iOS/Bonjour) ist davon nicht betroffen — nur Windows-PCs
+> im Verwaltungsbereich brauchen ggf. Bonjour oder greifen weiterhin über
+> `http://<pi-ip>:3001` zu, was unverändert parallel funktioniert.
+
+`scripts/Caddyfile` verwendet bewusst `http://haengt.local` (mit
+Schema-Präfix) statt eines bloßen Hostnamens — das weist Caddy an, **kein**
+automatisches HTTPS/ACME für diese `.local`-Adresse zu versuchen, wofür es
+ohnehin kein öffentliches Zertifikat geben kann.
+
 ## Troubleshooting
 
 | Symptom                                    | Wahrscheinliche Ursache                                    | Fix                                                                     |

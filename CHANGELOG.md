@@ -9,7 +9,7 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
-- _Noch nichts Neues_
+- Optionaler mDNS-Hostname `haengt.local` samt Reverse-Proxy: `scripts/Caddyfile` (Caddy, Port 80 -> `localhost:3001`, kein Automatic-HTTPS fuer die `.local`-Adresse) plus `avahi-daemon` fuer die mDNS-Ankuendigung. Installation in `docs/RASPBERRY-PI-SETUP.md`, Schritt 11. Bestehender Zugriff ueber `http://<pi-ip>:3001` bleibt unveraendert zusaetzlich moeglich (Windows-Clients ohne Bonjour loesen `.local` oft nicht auf).
 
 ### Changed
 
