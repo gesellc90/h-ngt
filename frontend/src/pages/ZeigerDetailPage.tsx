@@ -184,7 +184,7 @@ function ZeigerBuchungsListe({
 export default function ZeigerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { member, isAdmin } = useAuth();
+  const { member } = useAuth();
   const { showToast } = useToast();
 
   const [zeiger, setZeiger] = useState<ZeigerRow | null>(null);
@@ -305,7 +305,10 @@ export default function ZeigerDetailPage() {
     );
   }
 
-  const canClose = zeiger.status === 'offen' && (isAdmin || zeiger.created_by === member?.id);
+  // Jedes eingeloggte Mitglied darf einen offenen Zeiger schließen, nicht nur
+  // Admin oder Ersteller — Backend (POST /zeiger/:id/close) erlaubt das
+  // ohnehin schon jedem authentifizierten Mitglied.
+  const canClose = zeiger.status === 'offen';
   const offen = zeiger.status === 'offen';
 
   return (

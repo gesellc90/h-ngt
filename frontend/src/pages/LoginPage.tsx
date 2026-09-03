@@ -32,7 +32,7 @@ export default function LoginPage() {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
-          setError('Kürzel oder Losungswort nicht korrekt. Bitte prüfen und erneut versuchen.');
+          setError('Benutzername oder Passwort nicht korrekt. Bitte prüfen und erneut versuchen.');
         } else if (err.status === 429) {
           setError('Zu viele Fehlversuche. Bitte warte 15 Minuten und versuche es erneut.');
         } else {
@@ -159,7 +159,7 @@ export default function LoginPage() {
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Kürzel */}
+            {/* Benutzername */}
             <div>
               <label
                 htmlFor="username"
@@ -174,7 +174,7 @@ export default function LoginPage() {
                   marginBottom: 6,
                 }}
               >
-                Kürzel
+                Benutzername
               </label>
               <input
                 id="username"
@@ -210,7 +210,7 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Losungswort */}
+            {/* Passwort */}
             <div>
               <label
                 htmlFor="password"
@@ -225,7 +225,7 @@ export default function LoginPage() {
                   marginBottom: 6,
                 }}
               >
-                Losungswort
+                Passwort
               </label>
               <input
                 id="password"
