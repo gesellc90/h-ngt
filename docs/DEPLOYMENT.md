@@ -297,42 +297,27 @@ curl -fsS http://localhost:3001/api/v1/health
 
 Diese Punkte sind aktuell **bewusst offen** — sie blockieren keinen
 Initial-Deploy auf den Pi (App ist im Vereins-LAN über `http://<pi-ip>:3001`
-nutzbar), würden für ein Single-Port-Setup mit Reverse-Proxy aber gebraucht
-und sind als Folge-Issues zur Bearbeitung eingeplant.
+oder — seit Einrichtung des optionalen Reverse-Proxys, siehe
+[`RASPBERRY-PI-SETUP.md`](./RASPBERRY-PI-SETUP.md#schritt-11--freundlicher-hostname-mdns--reverse-proxy) —
+`http://haengt.local` nutzbar).
 
 ### 1. `HOST` aus dem EnvironmentFile wird (noch) nicht respektiert
 
 `backend/src/server.ts` ruft `app.listen(env.PORT, …)` ohne `host`-Parameter
 auf — Express bindet damit auf `0.0.0.0`. Ein `HOST=127.0.0.1` in
-`/etc/getraenke/env` hätte aktuell **keine Wirkung**.
+`/etc/getraenke/env` hätte aktuell **keine Wirkung**. Das bedeutet: auch mit
+dem `haengt.local`-Reverse-Proxy (Schritt 11) bleibt Port 3001 zusätzlich
+direkt aus dem Vereins-LAN erreichbar (kein echtes Single-Port-Setup, nur
+ein bequemerer Zugang zusätzlich zum bestehenden).
 
-**Was nötig wird, sobald Caddy/nginx davor kommt:**
+**Was nötig wird, um Port 3001 wirklich auf localhost zu beschränken:**
 
 - `backend/src/utils/env.ts`: `HOST: z.string().default('0.0.0.0')` ergänzen.
 - `backend/src/server.ts`: `app.listen(env.PORT, env.HOST, …)`.
 - Supertest-Integrationstest dafür (Endpoint binden + 127.0.0.1 erreichen).
+- `/etc/getraenke/env`: `HOST=127.0.0.1` ergänzen, `ufw delete allow 3001/tcp`.
 
 Aufwand: ~30 Zeilen inkl. Test, eigener `feat(server)`-PR.
-
-### 2. Frontend wird (noch) nicht vom Backend statisch ausgeliefert
-
-`ARCHITECTURE.md` beschreibt: Express liefert `frontend/dist/` per
-`express.static` aus, damit nur ein Port (`3001`) im Vereins-WLAN exponiert
-wird. Aktuell macht der Code das **nicht** — Frontend-Assets sind im Release
-unter `frontend/dist/`, werden aber nicht geserviced.
-
-Solange Mitglieder die App über `http://<pi-ip>:3001/api/...` aufrufen würden,
-fällt das nicht auf. Sobald sie aber die React-SPA selbst öffnen sollen,
-braucht es entweder:
-
-- **Variante A (empfohlen):** `backend/src/app.ts` um
-  `app.use(express.static(path.resolve('../frontend/dist')))` plus
-  SPA-Fallback (`app.get('*', (_, res) => res.sendFile(…))`) erweitern.
-  Im Deploy-Workflow muss `frontend/dist/` im Tarball sein (ist es bereits).
-- **Variante B:** Vite-Preview oder ein dedizierter statischer Server
-  (Caddy/nginx) liefert das Frontend; die App bleibt API-only.
-
-Aufwand Variante A: ~50–80 Zeilen + Tests, eigener `feat(server)`-PR.
 
 ## Weiterführende Doku
 
