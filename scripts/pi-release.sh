@@ -84,20 +84,39 @@ fi
 log "Vorheriges Release: ${PREVIOUS:-<keines (Initial-Deploy)>}"
 
 # ---------------------------------------------------------------------------
-# 2) DB-Backup (Hot-Backup via SQLite-eigene API, WAL-sicher).
+# 2) StateDirectory sicherstellen (idempotent).
+#    Normalerweise legt systemd (StateDirectory=getraenke in
+#    scripts/getraenke.service) dieses Verzeichnis beim ersten Service-Start
+#    automatisch an. Bei einem Initial-Deploy auf einem frischen Host wurde
+#    der Service aber noch nie gestartet, wenn wir hier ankommen — ohne
+#    diesen Schritt scheitert die Migration weiter unten mit
+#    "EACCES: permission denied, mkdir '/var/lib/getraenke'", weil der
+#    App-User getraenke keine Schreibrechte auf /var/lib hat, um sein
+#    eigenes State-Verzeichnis selbst anzulegen.
+# ---------------------------------------------------------------------------
+sudo /usr/bin/install -d -m 0750 -o getraenke -g getraenke /var/lib/getraenke
+
+# ---------------------------------------------------------------------------
+# 3) DB-Backup (Hot-Backup via SQLite-eigene API, WAL-sicher).
+#    Läuft als App-User getraenke (per sudo), NICHT als getraenke-runner:
+#    sqlite3 .backup braucht Schreibzugriff auf das Quellverzeichnis (für
+#    seine Lock-/Journal-Datei), nicht nur auf die DB-Datei selbst. Der
+#    Runner hat auf /var/lib/getraenke bewusst nur Lesezugriff (siehe
+#    docs/DEPLOYMENT.md) — als getraenke-runner ausgeführt schlägt der
+#    Befehl daher mit "Error: attempt to write a readonly database" fehl.
 # ---------------------------------------------------------------------------
 mkdir -p "$BACKUP_DIR"
 if [[ -f "$DB_PATH" ]]; then
   STAMP=$(date -u +"%Y%m%dT%H%M%SZ")
   BACKUP_DEST="$BACKUP_DIR/$TAG-$STAMP.sqlite"
-  sqlite3 "$DB_PATH" ".backup '$BACKUP_DEST'"
+  sudo -u getraenke /usr/bin/sqlite3 "$DB_PATH" ".backup '$BACKUP_DEST'"
   log "Backup: $BACKUP_DEST ($(du -h "$BACKUP_DEST" | cut -f1))"
 else
   log "Keine bestehende DB unter $DB_PATH — überspringe Backup."
 fi
 
 # ---------------------------------------------------------------------------
-# 3) Release entpacken.
+# 4) Release entpacken.
 # ---------------------------------------------------------------------------
 if [[ -d "$RELEASE_DIR" ]]; then
   log "Release-Verzeichnis existiert (Re-Deploy) — entferne es."
@@ -108,7 +127,7 @@ tar -xzf "$TARBALL" -C "$RELEASE_DIR"
 chmod +x "$RELEASE_DIR/scripts/deploy-migrate.sh"
 
 # ---------------------------------------------------------------------------
-# 4) Produktions-Dependencies installieren (better-sqlite3 ARM-Build).
+# 5) Produktions-Dependencies installieren (better-sqlite3 ARM-Build).
 # ---------------------------------------------------------------------------
 (
   cd "$RELEASE_DIR"
@@ -116,12 +135,12 @@ chmod +x "$RELEASE_DIR/scripts/deploy-migrate.sh"
 )
 
 # ---------------------------------------------------------------------------
-# 5) Migrationen ausführen (als App-User getraenke).
+# 6) Migrationen ausführen (als App-User getraenke).
 # ---------------------------------------------------------------------------
 "$RELEASE_DIR/scripts/deploy-migrate.sh" "$RELEASE_DIR"
 
 # ---------------------------------------------------------------------------
-# 6) Symlink atomar swappen. Ab hier greift bei Fehlern der Rollback-Trap.
+# 7) Symlink atomar swappen. Ab hier greift bei Fehlern der Rollback-Trap.
 # ---------------------------------------------------------------------------
 NEW_LINK="$CURRENT_LINK.new"
 ln -sfn "$RELEASE_DIR" "$NEW_LINK"
@@ -130,7 +149,7 @@ SWAPPED=true
 log "Symlink: $CURRENT_LINK → $(readlink -f "$CURRENT_LINK")"
 
 # ---------------------------------------------------------------------------
-# 7) Service neu starten.
+# 8) Service neu starten.
 # ---------------------------------------------------------------------------
 sudo /usr/bin/systemctl restart getraenke.service
 RESTART_OK=false
@@ -148,7 +167,7 @@ if [[ "$RESTART_OK" != "true" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 8) Smoke-Test (/api/v1/health).
+# 9) Smoke-Test (/api/v1/health).
 # ---------------------------------------------------------------------------
 SMOKE_OK=false
 for i in 1 2 3 4 5; do
@@ -170,7 +189,7 @@ fi
 trap - ERR
 
 # ---------------------------------------------------------------------------
-# 9) Alte Releases aufräumen (letzte KEEP_RELEASES behalten).
+# 10) Alte Releases aufräumen (letzte KEEP_RELEASES behalten).
 # ---------------------------------------------------------------------------
 ACTIVE=$(basename "$(readlink -f "$CURRENT_LINK")")
 # Release-Verzeichnisnamen sind immer vX.Y.Z (rein alphanumerisch), daher ist
