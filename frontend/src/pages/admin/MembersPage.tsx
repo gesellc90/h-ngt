@@ -214,7 +214,7 @@ function CreateMemberForm({ onCreated }: CreateMemberFormProps) {
         {(['display_name', 'username', 'password'] as const).map((field) => (
           <div key={field}>
             <label style={labelStyle}>
-              {field === 'display_name' ? 'Name' : field === 'username' ? 'Kürzel' : 'Losungswort'}
+              {field === 'display_name' ? 'Name' : field === 'username' ? 'Benutzername' : 'Passwort'}
             </label>
             <input
               type={field === 'password' ? 'password' : 'text'}
@@ -241,7 +241,7 @@ function CreateMemberForm({ onCreated }: CreateMemberFormProps) {
           <label style={labelStyle}>Rolle</label>
           <select name="role" value={form.role} onChange={handleChange} style={inputStyle}>
             <option value="member">Mitglied</option>
-            <option value="admin">Vorstand</option>
+            <option value="admin">Admin</option>
           </select>
         </div>
         <div>
@@ -320,7 +320,7 @@ function ResetPasswordForm({ memberId, onClose }: ResetPasswordFormProps) {
     setIsPending(true);
     try {
       await membersApi.update(memberId, { password });
-      showToast('Losungswort wurde zurückgesetzt.', 'success');
+      showToast('Passwort wurde zurückgesetzt.', 'success');
       onClose();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Fehler.', 'error');
@@ -338,7 +338,7 @@ function ResetPasswordForm({ memberId, onClose }: ResetPasswordFormProps) {
         type="password"
         required
         minLength={8}
-        placeholder="Neues Losungswort (mind. 8 Zeichen)"
+        placeholder="Neues Passwort (mind. 8 Zeichen)"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         style={{ ...inputStyle, flex: 1 }}
@@ -533,7 +533,7 @@ export default function MembersPage() {
               <tr>
                 {[
                   'Name',
-                  'Kürzel',
+                  'Benutzername',
                   'E-Mail',
                   'Rolle',
                   'Kategorie',
@@ -611,7 +611,7 @@ export default function MembersPage() {
                         fontFamily: 'var(--font-sans)',
                       }}
                     >
-                      {m.role === 'admin' ? 'Vorstand' : 'Mitglied'}
+                      {m.role === 'admin' ? 'Admin' : 'Mitglied'}
                     </td>
                     <td style={{ padding: '10px 16px' }}>
                       <select
@@ -715,7 +715,7 @@ export default function MembersPage() {
                           }}
                           style={btnGhost}
                         >
-                          Losungswort
+                          Passwort
                         </button>
                         {m.is_active === 1 && (
                           <button

@@ -13,7 +13,16 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Changed
 
-- _Noch keine Änderungen_
+- Rolle `admin` heißt in der Oberfläche jetzt **"Admin"** statt "Vorstand"
+  (Profil, Mitgliederverwaltung).
+- Login- und Mitgliederverwaltungs-Felder heißen jetzt **"Benutzername"**
+  statt "Kürzel" und **"Passwort"** statt "Losungswort" (Login-Seite, Profil,
+  Mitgliederverwaltung inkl. Passwort-Reset-Button und Fehlermeldungen).
+- **Zeiger schließen ist jetzt für jedes Mitglied möglich**, nicht mehr nur
+  für Admins oder den ursprünglichen Ersteller. Die Backend-Route
+  (`POST /zeiger/:id/close`) erlaubte das bereits jedem authentifizierten
+  Mitglied — nur das Frontend (`ZeigerDetailPage`) hat den
+  "Zeiger schließen"-Button fälschlich auf Admin/Ersteller beschränkt.
 
 ### Deprecated
 
