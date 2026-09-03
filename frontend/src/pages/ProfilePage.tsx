@@ -363,8 +363,8 @@ export default function ProfilePage() {
           <dl style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
             {[
               { label: 'Name', value: member?.display_name },
-              { label: 'Kürzel', value: member?.username },
-              { label: 'Rolle', value: member?.role === 'admin' ? 'Vorstand' : 'Mitglied' },
+              { label: 'Benutzername', value: member?.username },
+              { label: 'Rolle', value: member?.role === 'admin' ? 'Admin' : 'Mitglied' },
               { label: 'E-Mail', value: member?.email ?? '–' },
             ].map(({ label, value }) => (
               <div key={label} style={{ display: 'flex', gap: 12 }}>

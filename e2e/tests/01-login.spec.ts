@@ -12,8 +12,8 @@ test.describe('Login-Flow', () => {
 
   test('Falsches Passwort: Fehlermeldung sichtbar, kein Redirect', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('Kürzel').fill('anna');
-    await page.getByLabel('Losungswort').fill('falsch-falsch-falsch');
+    await page.getByLabel('Benutzername').fill('anna');
+    await page.getByLabel('Passwort').fill('falsch-falsch-falsch');
     await page.getByRole('button', { name: /anmelden|einloggen|login/i }).click();
 
     // URL bleibt /login.
