@@ -37,6 +37,17 @@ const testEnv = {
   AVATAR_DIR: '/tmp',
   UPDATE_STATE_DIR: '/tmp',
   TRUST_PROXY: 0,
+  MAIL_ENABLED: false,
+  SMTP_HOST: 'sslout.df.eu',
+  SMTP_PORT: 465,
+  SMTP_SECURE: true,
+  SMTP_USER: '',
+  SMTP_PASS: '',
+  MAIL_FROM: '',
+  MAIL_SUMMARY_TO: '',
+  MAIL_SUMMARY_CC: '',
+  MAIL_SCHEDULE_ENABLED: false,
+  MAIL_SCHEDULE_HOUR: 3,
 };
 
 // ---------------------------------------------------------------------------

@@ -103,3 +103,23 @@ export interface AuditLogRow {
   meta: string | null; // JSON-String
   created_at: string;
 }
+
+export type MailDispatchKind = 'member' | 'summary';
+export type MailDispatchStatus = 'sent' | 'failed';
+export type MailDispatchTrigger = 'schedule' | 'manual';
+
+export interface MailDispatchRow {
+  id: number;
+  /** Abrechnungsmonat im Format "YYYY-MM". */
+  period: string;
+  kind: MailDispatchKind;
+  /** NULL bei kind = 'summary'. */
+  member_id: number | null;
+  recipient: string;
+  status: MailDispatchStatus;
+  total_cents: number | null;
+  error: string | null;
+  message_id: string | null;
+  triggered_by: MailDispatchTrigger;
+  created_at: string;
+}

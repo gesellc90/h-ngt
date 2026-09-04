@@ -73,6 +73,48 @@ function row(...cells: (string | number)[]): string {
  * Erzeugt den CSV-Buffer für einen Monatsbericht.
  * Enthält Einzelbuchungen + Zusammenfassung pro Getränk.
  */
+/**
+ * Sammel-CSV über alle Mitglieder eines Monats (eine Zeile pro Getränk und
+ * Mitglied, plus Zwischensumme je Mitglied). Pendant zu `generateAllMembersPdf`,
+ * für die Sammelabrechnung per Mail an die Wirtschaftskommission (M15).
+ */
+export function generateAllMembersCsv(reports: MonthlyReport[]): Buffer {
+  const lines: string[] = [];
+
+  if (reports.length === 0) {
+    lines.push(row('Sammel-Abrechnung'));
+    lines.push(row('(keine aktiven Mitglieder)'));
+    return Buffer.from('﻿' + lines.join(CRLF), 'utf-8');
+  }
+
+  const [first] = reports;
+  const MONTH_NAME = new Date(first!.year, first!.month - 1, 1).toLocaleString('de-DE', {
+    month: 'long',
+  });
+  lines.push(row(`Sammel-Abrechnung – ${MONTH_NAME} ${first!.year}`));
+  lines.push('');
+
+  lines.push(row('Mitglied', 'Getränk', 'Anzahl', 'Betrag (€)'));
+  let grandTotalCents = 0;
+  for (const report of reports) {
+    grandTotalCents += report.grand_total_cents;
+    if (report.summary.length === 0) {
+      lines.push(row(report.member_display_name, '(keine Buchungen)', '', ''));
+      continue;
+    }
+    for (const s of report.summary) {
+      lines.push(row(report.member_display_name, s.drink_name, s.count, eur(s.total_cents)));
+    }
+    lines.push(row(`${report.member_display_name} – Summe`, '', '', eur(report.grand_total_cents)));
+  }
+  lines.push('');
+  lines.push(row('Gesamt', '', '', eur(grandTotalCents)));
+  lines.push('');
+  lines.push(row(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`));
+
+  return Buffer.from('﻿' + lines.join(CRLF), 'utf-8');
+}
+
 export function generateCsv(report: MonthlyReport): Buffer {
   const MONTH_NAME = new Date(report.year, report.month - 1, 1).toLocaleString('de-DE', {
     month: 'long',

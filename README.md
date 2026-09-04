@@ -13,6 +13,7 @@ Lokale Web-App zur Getränkeabrechnung einer Verbindung. Mitglieder buchen ihre 
 - 📜 Buchungshistorie & Stornierung innerhalb eines Zeitfensters
 - 📱 Responsive UI (Tablet, Smartphone, Desktop)
 - 🔄 Automatische App-Updates alle zwei Wochen (neuestes stabiles Release), von Admins im System-Bereich auch manuell anstoßbar
+- 📧 Automatischer Mailversand der Monatsabrechnungen zum Monatsersten (Einzelabrechnung je Mitglied, Sammelabrechnung an die Wirtschaftskommission), inkl. Testmail, Dry-Run-Vorschau und Versandprotokoll im Admin-Bereich
 
 ## Tech-Stack
 

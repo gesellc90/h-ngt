@@ -15,6 +15,7 @@ import {
   TokenBlocklistRepo,
   VerbindungenRepo,
   ZeigerRepo,
+  MailDispatchRepo,
 } from './db/repos/index.js';
 import { AuthService } from './services/AuthService.js';
 import { MembersService } from './services/MembersService.js';
@@ -25,6 +26,9 @@ import { ReportService } from './services/ReportService.js';
 import { ZeigerService } from './services/ZeigerService.js';
 import { VerbindungenService } from './services/VerbindungenService.js';
 import { UpdateService } from './services/UpdateService.js';
+import { MailService } from './services/MailService.js';
+import { BillingMailService } from './services/BillingMailService.js';
+import { MailScheduler } from './services/MailScheduler.js';
 import { healthRouter } from './routes/health.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createMembersRouter } from './routes/members.js';
@@ -35,6 +39,7 @@ import { createReportsRouter } from './routes/reports.js';
 import { createZeigerRouter } from './routes/zeiger.js';
 import { createVerbindungenRouter } from './routes/verbindungen.js';
 import { createUpdateRouter } from './routes/update.js';
+import { createMailRouter } from './routes/mail.js';
 import { createErrorHandler } from './middleware/errorHandler.js';
 
 export interface AppOptions {
@@ -106,6 +111,7 @@ export function createApp({ logger, db, env }: AppOptions): Express {
   const bookingsRepo = new BookingsRepo(db);
   const verbindungenRepo = new VerbindungenRepo(db);
   const zeigerRepo = new ZeigerRepo(db);
+  const mailDispatchRepo = new MailDispatchRepo(db);
 
   const authService = new AuthService(
     membersRepo,
@@ -130,6 +136,45 @@ export function createApp({ logger, db, env }: AppOptions): Express {
   const verbindungenService = new VerbindungenService(verbindungenRepo, auditLogRepo);
   const updateService = new UpdateService(env.UPDATE_STATE_DIR, auditLogRepo);
 
+  const mailService = new MailService(
+    {
+      enabled: env.MAIL_ENABLED,
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      secure: env.SMTP_SECURE,
+      user: env.SMTP_USER,
+      pass: env.SMTP_PASS,
+      from: env.MAIL_FROM,
+    },
+    logger,
+  );
+  const summaryCc = env.MAIL_SUMMARY_CC
+    ? env.MAIL_SUMMARY_CC.split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  const billingMailService = new BillingMailService(
+    reportService,
+    membersRepo,
+    mailService,
+    mailDispatchRepo,
+    auditLogRepo,
+    env.MAIL_SUMMARY_TO,
+    summaryCc,
+  );
+
+  // Scheduler nur außerhalb von Tests starten: NODE_ENV=test setzen alle
+  // Testsuiten explizit, dadurch bleibt createApp() in Tests frei von
+  // Hintergrund-Timern, unabhängig davon, was MAIL_SCHEDULE_ENABLED sagt.
+  if (env.MAIL_SCHEDULE_ENABLED && env.NODE_ENV !== 'test') {
+    const scheduler = new MailScheduler(
+      billingMailService,
+      { hour: env.MAIL_SCHEDULE_HOUR },
+      logger,
+    );
+    scheduler.start();
+  }
+
   // -- Profilbilder (statische Auslieferung vor API-Routen) -------------------
   app.use('/avatars', express.static(env.AVATAR_DIR));
 
@@ -147,6 +192,10 @@ export function createApp({ logger, db, env }: AppOptions): Express {
   app.use('/api/v1/zeiger', createZeigerRouter(authService, zeigerService));
   app.use('/api/v1/verbindungen', createVerbindungenRouter(authService, verbindungenService));
   app.use('/api/v1/update', createUpdateRouter(authService, updateService));
+  app.use(
+    '/api/v1/mail',
+    createMailRouter(authService, mailService, billingMailService, mailDispatchRepo, env),
+  );
 
   // -- Frontend (SPA) ---------------------------------------------------------
   // Im Production-Build liegen die gebauten React-Assets in frontend/dist,

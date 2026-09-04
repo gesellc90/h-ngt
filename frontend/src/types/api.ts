@@ -155,3 +155,51 @@ export interface UpdateStatus {
   last_trigger: string | null;
   in_progress: boolean;
 }
+
+// -- Mailversand der Monatsabrechnungen (M15) --------------------------------
+
+export interface MailStatus {
+  enabled: boolean;
+  scheduleEnabled: boolean;
+  scheduleHour: number;
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: boolean;
+  summaryTo: string | null;
+  summaryCc: string[];
+}
+
+export type MailRunLineStatus = 'sent' | 'failed' | 'skipped' | 'planned';
+
+export interface MailRunLine {
+  kind: 'member' | 'summary';
+  memberId: number | null;
+  displayName: string | null;
+  recipient: string | null;
+  status: MailRunLineStatus;
+  reason?: string;
+  totalCents?: number;
+}
+
+export interface MailRunResult {
+  period: string;
+  lines: MailRunLine[];
+}
+
+export type MailDispatchKind = 'member' | 'summary';
+export type MailDispatchStatus = 'sent' | 'failed';
+export type MailDispatchTrigger = 'schedule' | 'manual';
+
+export interface MailDispatchRow {
+  id: number;
+  period: string;
+  kind: MailDispatchKind;
+  member_id: number | null;
+  recipient: string;
+  status: MailDispatchStatus;
+  total_cents: number | null;
+  error: string | null;
+  message_id: string | null;
+  triggered_by: MailDispatchTrigger;
+  created_at: string;
+}

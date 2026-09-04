@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { generateCsv } from '../../../src/formatters/csvFormatter.js';
+import { generateCsv, generateAllMembersCsv } from '../../../src/formatters/csvFormatter.js';
 import type { MonthlyReport } from '../../../src/services/ReportService.js';
 
 /** Report mit genau einer Summary-Zeile, deren Getränkename `name` ist. */
@@ -51,5 +51,43 @@ describe('generateCsv – Formel-Injektion', () => {
     const csv = generateCsv(reportWithDrinkName('Cola')).toString('utf-8');
     expect(csv).toContain('Cola');
     expect(csv).not.toContain(`'Cola`);
+  });
+});
+
+describe('generateAllMembersCsv', () => {
+  it('enthält eine Zeile je Getränk, eine Summenzeile je Mitglied und die Gesamtsumme', () => {
+    const reports: MonthlyReport[] = [
+      reportWithDrinkName('Bier'),
+      { ...reportWithDrinkName('Cola'), member_id: 2, member_display_name: 'Bert Beispiel' },
+    ];
+    const csv = generateAllMembersCsv(reports).toString('utf-8');
+
+    expect(csv).toContain('Anna Muster');
+    expect(csv).toContain('Bert Beispiel');
+    expect(csv).toContain('Bier');
+    expect(csv).toContain('Cola');
+    // Gesamtsumme über beide Mitglieder (je 1,00 €).
+    expect(csv).toContain('Gesamt');
+    expect(csv).toContain('2,00');
+  });
+
+  it('markiert Mitglieder ohne Buchungen statt sie wegzulassen', () => {
+    const emptyReport: MonthlyReport = {
+      member_id: 3,
+      member_display_name: 'Clara Null',
+      year: 2026,
+      month: 5,
+      entries: [],
+      summary: [],
+      grand_total_cents: 0,
+    };
+    const csv = generateAllMembersCsv([emptyReport]).toString('utf-8');
+    expect(csv).toContain('Clara Null');
+    expect(csv).toContain('(keine Buchungen)');
+  });
+
+  it('liefert einen Platzhalter, wenn keine aktiven Mitglieder vorliegen', () => {
+    const csv = generateAllMembersCsv([]).toString('utf-8');
+    expect(csv).toContain('keine aktiven Mitglieder');
   });
 });

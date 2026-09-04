@@ -6,3 +6,4 @@ export { AuditLogRepo } from './AuditLogRepo.js';
 export { TokenBlocklistRepo } from './TokenBlocklistRepo.js';
 export { VerbindungenRepo } from './VerbindungenRepo.js';
 export { ZeigerRepo } from './ZeigerRepo.js';
+export { MailDispatchRepo } from './MailDispatchRepo.js';

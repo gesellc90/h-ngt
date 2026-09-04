@@ -9,6 +9,18 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- **M15 — Automatischer Mailversand der Monatsabrechnungen.** Am 1. des
+  Monats bekommt jedes aktive Mitglied mit hinterlegter E-Mail-Adresse und
+  Verbrauch im Vormonat automatisch seine Abrechnung als PDF per Mail; die
+  Wirtschaftskommission erhält eine Sammelmail mit der Sammel-Abrechnung
+  aller Mitglieder und der Zeiger-Übersicht des Monats (je PDF + CSV).
+  Versand über das bestehende df.eu-SMTP-Postfach (`nodemailer`), idempotent
+  über eine neue Tabelle `mail_dispatches` (kein Doppelversand nach
+  Neustart oder erneutem Klick). Neuer Admin-Reiter „Mailversand"
+  (`/admin/mail`): Testmail, Dry-Run-Vorschau, manueller Versand,
+  Versandprotokoll. Standardmäßig deaktiviert (`MAIL_ENABLED=false`,
+  `MAIL_SCHEDULE_ENABLED=false`) — siehe `docs/MAIL.md` für die
+  Inbetriebnahme.
 - Optionaler mDNS-Hostname `haengt.local` samt Reverse-Proxy: `scripts/Caddyfile` (Caddy, Port 80 -> `localhost:3001`, kein Automatic-HTTPS fuer die `.local`-Adresse) plus `avahi-daemon` fuer die mDNS-Ankuendigung. Installation in `docs/RASPBERRY-PI-SETUP.md`, Schritt 11. Bestehender Zugriff ueber `http://<pi-ip>:3001` bleibt unveraendert zusaetzlich moeglich (Windows-Clients ohne Bonjour loesen `.local` oft nicht auf).
 
 ### Changed
