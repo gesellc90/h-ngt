@@ -317,6 +317,51 @@ describe('MembersRepo', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // email_verified_at (M16)
+  // ---------------------------------------------------------------------------
+
+  describe('email_verified_at', () => {
+    it('ist standardmäßig NULL', () => {
+      const m = repo.create({ username: 'ev1', display_name: 'EV1', email: 'ev1@test.de' });
+      expect(m.email_verified_at).toBeNull();
+    });
+
+    it('markEmailVerified setzt den Zeitpunkt', () => {
+      const m = repo.create({ username: 'ev2', display_name: 'EV2', email: 'ev2@test.de' });
+      const verifiedAt = new Date().toISOString();
+      repo.markEmailVerified(m.id, verifiedAt);
+      expect(repo.findById(m.id)?.email_verified_at).toBe(verifiedAt);
+    });
+
+    it('wird bei einer tatsächlichen Änderung der E-Mail-Adresse auf NULL zurückgesetzt', () => {
+      const m = repo.create({ username: 'ev3', display_name: 'EV3', email: 'alt@test.de' });
+      repo.markEmailVerified(m.id, new Date().toISOString());
+      expect(repo.findById(m.id)?.email_verified_at).not.toBeNull();
+
+      const updated = repo.update(m.id, { email: 'neu@test.de' });
+      expect(updated?.email_verified_at).toBeNull();
+    });
+
+    it('bleibt erhalten, wenn dieselbe E-Mail-Adresse erneut gesetzt wird', () => {
+      const m = repo.create({ username: 'ev4', display_name: 'EV4', email: 'gleich@test.de' });
+      const verifiedAt = new Date().toISOString();
+      repo.markEmailVerified(m.id, verifiedAt);
+
+      const updated = repo.update(m.id, { email: 'gleich@test.de' });
+      expect(updated?.email_verified_at).toBe(verifiedAt);
+    });
+
+    it('bleibt erhalten, wenn ein anderes Feld geändert wird', () => {
+      const m = repo.create({ username: 'ev5', display_name: 'EV5', email: 'ev5@test.de' });
+      const verifiedAt = new Date().toISOString();
+      repo.markEmailVerified(m.id, verifiedAt);
+
+      const updated = repo.update(m.id, { display_name: 'Neu' });
+      expect(updated?.email_verified_at).toBe(verifiedAt);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Wirtschaftskommission & Streichen (M13)
   // ---------------------------------------------------------------------------
 

@@ -154,6 +154,7 @@ export default function ProfilePage() {
   const [editEmail, setEditEmail] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -266,6 +267,22 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleResendVerification() {
+    setIsResending(true);
+    try {
+      await authApi.resendVerification();
+      showToast('Bestätigungsmail wurde erneut versendet.', 'success');
+    } catch (err) {
+      const msg =
+        err instanceof ApiError && err.code === 'MAIL_DISABLED'
+          ? 'Mailversand ist nicht aktiviert (MAIL_ENABLED=false).'
+          : 'Bestätigungsmail konnte nicht versendet werden.';
+      showToast(msg, 'error');
+    } finally {
+      setIsResending(false);
+    }
+  }
+
   // -- Monatssumme ----------------------------------------------------------
 
   const now = new Date();
@@ -365,7 +382,6 @@ export default function ProfilePage() {
               { label: 'Name', value: member?.display_name },
               { label: 'Benutzername', value: member?.username },
               { label: 'Rolle', value: member?.role === 'admin' ? 'Admin' : 'Mitglied' },
-              { label: 'E-Mail', value: member?.email ?? '–' },
             ].map(({ label, value }) => (
               <div key={label} style={{ display: 'flex', gap: 12 }}>
                 <dt
@@ -395,6 +411,84 @@ export default function ProfilePage() {
                 </dd>
               </div>
             ))}
+
+            {/* E-Mail — mit Verifizierungs-Badge (M16) */}
+            <div style={{ display: 'flex', gap: 12 }}>
+              <dt
+                style={{
+                  width: 64,
+                  flexShrink: 0,
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--tinte-3)',
+                  letterSpacing: '0.04em',
+                  paddingTop: 1,
+                }}
+              >
+                E-Mail
+              </dt>
+              <dd
+                style={{
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 14,
+                  color: 'var(--tinte)',
+                  margin: 0,
+                  wordBreak: 'break-all',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  gap: 6,
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {member?.email ?? '–'}
+                  {member?.email && (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '1px 8px',
+                        borderRadius: 999,
+                        fontFamily: 'var(--font-sans)',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: '0.03em',
+                        color: member.email_verified_at ? 'var(--erfolg)' : 'var(--tinte-3)',
+                        border: `1px solid ${member.email_verified_at ? 'var(--erfolg)' : 'var(--line-2)'}`,
+                        background: member.email_verified_at ? 'var(--erfolg-bg)' : 'transparent',
+                      }}
+                    >
+                      {member.email_verified_at ? 'bestätigt' : 'nicht bestätigt'}
+                    </span>
+                  )}
+                </span>
+                {member?.email && !member.email_verified_at && (
+                  <button
+                    type="button"
+                    disabled={isResending}
+                    onClick={() => void handleResendVerification()}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: 'var(--korps-rot)',
+                      cursor: isResending ? 'not-allowed' : 'pointer',
+                      opacity: isResending ? 0.6 : 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    {isResending && <Spinner size="h-3 w-3" />}
+                    Bestätigungsmail erneut senden
+                  </button>
+                )}
+              </dd>
+            </div>
           </dl>
         </div>
       </section>

@@ -214,7 +214,11 @@ function CreateMemberForm({ onCreated }: CreateMemberFormProps) {
         {(['display_name', 'username', 'password'] as const).map((field) => (
           <div key={field}>
             <label style={labelStyle}>
-              {field === 'display_name' ? 'Name' : field === 'username' ? 'Benutzername' : 'Passwort'}
+              {field === 'display_name'
+                ? 'Name'
+                : field === 'username'
+                  ? 'Benutzername'
+                  : 'Passwort'}
             </label>
             <input
               type={field === 'password' ? 'password' : 'text'}
@@ -593,16 +597,54 @@ export default function MembersPage() {
                     <td
                       style={{
                         padding: '10px 16px',
-                        color: m.email ? 'var(--tinte-2)' : 'var(--tinte-4)',
                         fontFamily: 'var(--font-sans)',
                         maxWidth: 220,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
                       }}
-                      title={m.email ?? undefined}
                     >
-                      {m.email ?? '–'}
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          maxWidth: '100%',
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: m.email ? 'var(--tinte-2)' : 'var(--tinte-4)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={m.email ?? undefined}
+                        >
+                          {m.email ?? '–'}
+                        </span>
+                        {m.email && (
+                          <span
+                            title={
+                              m.email_verified_at ? 'E-Mail bestätigt' : 'E-Mail nicht bestätigt'
+                            }
+                            aria-label={
+                              m.email_verified_at ? 'E-Mail bestätigt' : 'E-Mail nicht bestätigt'
+                            }
+                            style={{
+                              flexShrink: 0,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '1px 6px',
+                              borderRadius: 999,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              letterSpacing: '0.03em',
+                              color: m.email_verified_at ? 'var(--erfolg)' : 'var(--tinte-4)',
+                              border: `1px solid ${m.email_verified_at ? 'var(--erfolg)' : 'var(--line-2)'}`,
+                            }}
+                          >
+                            {m.email_verified_at ? '✓' : '?'}
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td
                       style={{

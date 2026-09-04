@@ -6,3 +6,13 @@ export const loginSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+// ---------------------------------------------------------------------------
+// POST /auth/verify-email (M16)
+// ---------------------------------------------------------------------------
+
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1, 'Token darf nicht leer sein').max(512),
+});
+
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;

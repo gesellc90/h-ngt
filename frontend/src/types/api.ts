@@ -35,6 +35,8 @@ export interface PublicMember {
    */
   struck_until: string | null;
   email: string | null;
+  /** ISO-Zeitpunkt der Bestätigung (M16). NULL = nicht verifiziert. */
+  email_verified_at: string | null;
   avatar_path: string | null;
   created_at: string;
   updated_at: string;

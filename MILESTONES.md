@@ -19,6 +19,7 @@ Dieser Plan unterteilt das Projekt in 10 aufeinander aufbauende Meilensteine. Je
 | M13 | Wirtschaftskommission & Konten-Streichung                | 2–3 Tage          | M4, M5, M9                  |
 | M14 | Automatisches App-Update (2-Wochen-Timer + Admin-Button) | 4–6 Tage          | M3, M5, M7                  |
 | M15 | Automatischer Mailversand der Monatsabrechnungen         | 3–4 Tage          | M6, M10                     |
+| M16 | E-Mail-Verifizierung                                     | 2–3 Tage          | M10, M15                    |
 
 ---
 
@@ -327,7 +328,7 @@ Dieser Plan unterteilt das Projekt in 10 aufeinander aufbauende Meilensteine. Je
 
 **Definition of Done:** Ein eingeloggtes Mitglied kann im Profil seine E-Mail-Adresse setzen/ändern und ein Profilbild hoch- und wieder abladen; das Bild erscheint im Header (Fallback: Initialen). Admins können dieselben Felder für beliebige Mitglieder pflegen. E-Mail-Adressen sind eindeutig. Bilddateien liegen im `StateDirectory` und überleben Deployments. Lint, Unit-, Integrations- und E2E-Tests grün.
 
-> **Späterer Milestone — E-Mail-Verifizierung:** Setzt einen Versandweg voraus. Empfehlung für das Pi-Setup: **kein** Direktversand vom Pi (Deliverability/Spam), sondern ein externer SMTP-Relay/Transaktionsdienst — z. B. Brevo oder Mailgun (Free-Tier, SMTP) oder das Postfach des Vereinsproviders bzw. Gmail-SMTP mit App-Passwort. Technik dann: `nodemailer` + SMTP-Credentials in ENV, Spalte `email_verified_at`, einmaliger ablaufender Token (gehasht gespeichert), Bestätigungs-Endpunkt `GET /auth/verify-email?token=…` mit konfigurierter Basis-URL, Resend-Flow + Rate-Limit.
+> **Späterer Milestone — E-Mail-Verifizierung:** umgesetzt in M16 (baut auf dem in M15 eingeführten `MailService`/SMTP-Versandweg auf, statt auf einem separaten Cloud-Transaktionsdienst).
 
 ---
 
@@ -595,6 +596,46 @@ Dieser Plan unterteilt das Projekt in 10 aufeinander aufbauende Meilensteine. Je
 - [x] `backend/.env.example`, `docs/DEPLOYMENT.md` (Verweis auf `docs/MAIL.md`), `ARCHITECTURE.md` (Tabelle `mail_dispatches`, `/mail`-Routen-Übersicht), `CHANGELOG.md`.
 
 **Definition of Done:** Mit gesetzten SMTP-Zugangsdaten und `MAIL_ENABLED=true` kann ein Admin per Testmail die Verbindung prüfen, per Dry-Run sehen, wer für einen Monat was bekäme, und per Klick den echten Versand auslösen. Nach Aktivierung von `MAIL_SCHEDULE_ENABLED` läuft der Versand am 1. des Monats automatisch, holt einen verpassten Termin (Pi war aus) beim nächsten Start nach und verschickt dabei nichts doppelt. Lint, Typecheck, Unit- und Integrationstests grün.
+
+---
+
+## M16 — E-Mail-Verifizierung
+
+**Ziel:** Mitglieder können ihre hinterlegte E-Mail-Adresse per Bestätigungslink verifizieren, damit die Wirtschaftskommission sich darauf verlassen kann, dass die Monatsabrechnungen aus M15 tatsächlich ankommen. War in M10 bereits als eigener späterer Milestone vorgemerkt (siehe der dortige Hinweis) — nutzt den in M15 eingeführten `MailService` wieder.
+
+**Abhängigkeit:** M10 (Mitglieder-E-Mail-Adresse), M15 (`MailService`/SMTP-Konfiguration).
+
+### Festgelegte Entscheidungen
+
+- **Kein Gating.** Die Verifizierung ist zunächst rein informativ — ein Badge zeigt den Status im Profil und in der Admin-Mitgliederliste. Der Monatsabrechnungs-Versand aus M15 geht weiterhin an **alle** hinterlegten Adressen, verifiziert oder nicht (sonst bekäme bei fehlender Verifizierung niemand seine Rechnung). Ein späteres Gating bleibt möglich, ist aber nicht Teil dieses Milestones.
+- **Token:** 32 zufällige Bytes (`crypto.randomBytes(32).toString('base64url')`), in der DB ausschließlich als SHA-256-Hash gespeichert — nie im Klartext. 24 Stunden gültig, einmal verwendbar (`used_at`). Die Token-Zeile speichert zusätzlich die Adresse, für die sie ausgestellt wurde — ändert sich die Adresse danach, verifiziert ein alter Token die neue Adresse nicht (`EMAIL_CHANGED`).
+- **Bestätigungslink zeigt auf das Frontend** (`<APP_BASE_URL>/verify-email?token=…`), nicht direkt auf die API. Die SPA-Seite ruft `POST /api/v1/auth/verify-email` auf und zeigt ein gestaltetes Ergebnis (Erfolg/abgelaufen/schon benutzt/ungültig) — der SPA-Fallback in `app.ts` (`app.get('*')`) trägt das ohne Zusatzarbeit, Fehlerfälle erscheinen so in der Vereins-Optik statt als rohes JSON.
+- **Auslöser für den Versand:** Mitglied ändert die eigene Adresse (`PATCH /auth/me`) oder Admin ändert die eines Mitglieds (`PATCH /members/:id`) — beides setzt `email_verified_at` zurück und verschickt automatisch einen neuen Link. Zusätzlich ein „Bestätigungsmail erneut senden"-Button im Profil.
+- **`MAIL_ENABLED=false` blockiert nichts.** Das Speichern der Adresse funktioniert immer; der Versand wird dann nur übersprungen und geloggt. Der explizite Resend-Endpunkt gibt in dem Fall `503 MAIL_DISABLED` zurück — konsistent zu `POST /api/v1/mail/test` aus M15.
+
+### Umsetzung
+
+- [x] Migration 014: `members.email_verified_at TEXT` (NULL = nicht verifiziert, wird bei jeder tatsächlichen Adressänderung in `MembersRepo.update` automatisch zurückgesetzt); neue Tabelle `email_verifications` (`member_id`, `email`, `token_hash` UNIQUE, `expires_at`, `used_at`, `created_at`), Indizes auf `member_id` und `expires_at`.
+- [x] `EmailVerificationRepo` (`create`, `findByTokenHash`, `markUsed`, `invalidateOpenForMember`, `pruneExpired`) nach dem Muster von `TokenBlocklistRepo`.
+- [x] `EmailVerificationService`: Token erzeugen/hashen/versenden (über den vorhandenen `MailService`, kein zweiter Transport), Einlösen mit unterscheidbaren Fehlern (`TOKEN_INVALID` 400, `TOKEN_EXPIRED` 410, `TOKEN_USED` 409, `EMAIL_CHANGED` 409) via `AppError`; entwertet beim Ausstellen eines neuen Tokens alle offenen Tokens desselben Mitglieds. Audit-Log-Einträge `email_verification_sent`/`email_verified`.
+- [x] `MembersService.update()` verschickt nach einer tatsächlichen Adressänderung automatisch einen neuen Bestätigungslink (kein Effekt bei Entfernen der Adresse).
+- [x] Routen in `routes/auth.ts`: `POST /auth/verify-email` (unauthentifiziert, rate-limited), `POST /auth/me/verify-email/resend` (authentifiziert, rate-limited, `DISABLE_RATE_LIMIT`-Opt-out für E2E wie beim Login-Limiter).
+- [x] Neue ENV-Variable `APP_BASE_URL` (`utils/env.ts`, Default `http://localhost:3001`) für den absoluten Link in der Mail.
+- [x] **Tests:** Vitest — `EmailVerificationService.test.ts` (Token-Hashing, Ablauf, Einmal-Nutzung, geänderte Adresse, Entwerten offener Tokens, `resend()`-Vorbedingungen — `MailService` gefaked, keine echte Mail geht raus), `EmailVerificationRepo.test.ts`, `MembersRepo.test.ts` (Reset von `email_verified_at`); Supertest (`tests/integration/emailVerification.test.ts`) — beide Routen (200/400/401/409/410/503) sowie der automatische Trigger bei `PATCH /auth/me`/`PATCH /members/:id`.
+
+### Frontend
+
+- [x] Öffentliche Route `/verify-email` (`VerifyEmailPage.tsx`, außerhalb von `ProtectedRoute`): liest den Token aus der Query, ruft die API, zeigt Erfolg/Fehler in der Vereins-Optik plus Link zum Login.
+- [x] `ProfilePage`: Badge „bestätigt"/„nicht bestätigt" neben der E-Mail-Adresse plus „Bestätigungsmail erneut senden"-Button (nur bei hinterlegter, unbestätigter Adresse).
+- [x] Admin-`MembersPage`: Verifizierungsstatus (✓/?) in der Mitgliederliste.
+- [x] `PublicMember`/`types/api.ts` um `email_verified_at` ergänzt.
+
+### E2E & Dokumentation
+
+- [x] Playwright-E2E `10-email-verification`: Adresse setzen → Status „nicht bestätigt" → Token direkt in der Test-DB angelegt (Mailversand ist in der E2E-Umgebung deaktiviert, der Token wird laut Design nur als Hash gespeichert und ist daher nicht auslesbar — dasselbe Verfahren wie im Supertest) → `/verify-email?token=…` → Status „bestätigt".
+- [x] `ARCHITECTURE.md` (Tabelle `email_verifications`, neue Spalte `email_verified_at`, beide Routen), `docs/MAIL.md` (kurzer Abschnitt zur Verifizierung), `backend/.env.example`, `docs/DEPLOYMENT.md`, `CHANGELOG.md`.
+
+**Definition of Done:** Ein Mitglied mit hinterlegter Adresse bekommt automatisch eine Bestätigungsmail, sieht im Profil den Status und kann sie bei Bedarf erneut anfordern. Ein Klick auf den Link bestätigt die Adresse; abgelaufene, bereits benutzte oder für eine inzwischen geänderte Adresse ausgestellte Links zeigen einen klaren Fehler statt eines Absturzes. Der Monatsabrechnungs-Versand aus M15 ist unverändert nicht vom Verifizierungsstatus abhängig. Lint, Typecheck, Unit-, Integrations- und E2E-Tests grün.
 
 ---
 

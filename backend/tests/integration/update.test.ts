@@ -83,6 +83,7 @@ async function setupApp(): Promise<TestContext> {
       MAIL_SUMMARY_CC: '',
       MAIL_SCHEDULE_ENABLED: false,
       MAIL_SCHEDULE_HOUR: 3,
+      APP_BASE_URL: 'http://localhost:3001',
     },
   });
 

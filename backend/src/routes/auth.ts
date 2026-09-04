@@ -1,13 +1,16 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { loginSchema } from '../schemas/auth.js';
+import { loginSchema, verifyEmailSchema } from '../schemas/auth.js';
 import { updateSelfSchema } from '../schemas/profile.js';
 import { AuthError } from '../services/AuthService.js';
+import { AppError } from '../middleware/errorHandler.js';
 import { authenticate, type AuthenticatedRequest } from '../middleware/authenticate.js';
 import { toPublicMember } from '../services/MembersService.js';
 import { avatarUpload, saveAvatar, removeAvatarFile } from '../utils/avatar.js';
 import type { AuthService } from '../services/AuthService.js';
 import type { MembersService } from '../services/MembersService.js';
+import type { EmailVerificationService } from '../services/EmailVerificationService.js';
+import type { Env } from '../utils/env.js';
 
 /**
  * Erstellt den Auth-Router.
@@ -16,7 +19,9 @@ import type { MembersService } from '../services/MembersService.js';
 export function createAuthRouter(
   authService: AuthService,
   membersService: MembersService,
+  emailVerificationService: EmailVerificationService,
   avatarDir: string,
+  env: Env,
 ): Router {
   const router = Router();
 
@@ -34,6 +39,25 @@ export function createAuthRouter(
     // Bewusst als expliziter Opt-out: Der E2E-Harness läuft produktionsnah mit
     // NODE_ENV=production und ist auf diese Hatch angewiesen. Als Guardrail warnt
     // app.ts beim Start laut, falls das Flag in Produktion gesetzt ist.
+    skip: () => process.env['DISABLE_RATE_LIMIT'] === 'true',
+  });
+
+  // M16 — E-Mail-Verifizierung: gegen Token-Erraten (POST /verify-email, IP-basiert)
+  // bzw. Mail-Spam per Klick auf "erneut senden" (Resend, eingeloggt).
+  const verifyEmailLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.' },
+    skip: () => process.env['DISABLE_RATE_LIMIT'] === 'true',
+  });
+  const resendVerificationLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 5,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.' },
     skip: () => process.env['DISABLE_RATE_LIMIT'] === 'true',
   });
 
@@ -64,6 +88,55 @@ export function createAuthRouter(
       next(err);
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // POST /auth/verify-email — unauthentifiziert (der Link wird ggf. in einem
+  // anderen Browser/Gerät geöffnet als dem, in dem das Mitglied eingeloggt ist)
+  // ---------------------------------------------------------------------------
+  router.post('/verify-email', verifyEmailLimiter, (req, res, next) => {
+    const parsed = verifyEmailSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Ungültige Eingabe', details: parsed.error.flatten() });
+      return;
+    }
+
+    try {
+      const member = emailVerificationService.verify(parsed.data.token);
+      res.json(toPublicMember(member));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /auth/me/verify-email/resend  (geschützt) — "Bestätigungsmail erneut senden"
+  // ---------------------------------------------------------------------------
+  router.post(
+    '/me/verify-email/resend',
+    auth,
+    resendVerificationLimiter,
+    async (req, res, next) => {
+      if (!env.MAIL_ENABLED) {
+        next(
+          new AppError(
+            'Mailversand ist nicht aktiviert (MAIL_ENABLED=false)',
+            503,
+            'MAIL_DISABLED',
+          ),
+        );
+        return;
+      }
+
+      try {
+        const { auth: payload } = req as AuthenticatedRequest;
+        const memberId = Number(payload.sub);
+        await emailVerificationService.resend(memberId, memberId);
+        res.status(204).send();
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
 
   // ---------------------------------------------------------------------------
   // GET /auth/me  (geschützt)

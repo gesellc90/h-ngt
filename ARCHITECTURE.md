@@ -52,14 +52,16 @@ SQLite im **WAL-Mode** (Write-Ahead-Logging) für bessere Lese-Performance bei g
 > gespeichert. Die folgende Übersicht ist bewusst verdichtet — bei Abweichungen
 > gelten die Migrationen.
 
-**`members`** (001, erweitert durch 007/009/012) — Vereinsmitglieder + Admins:
+**`members`** (001, erweitert durch 007/009/012/014) — Vereinsmitglieder + Admins:
 `id`, `username` (NOCASE UNIQUE), `display_name`, `password_hash` (nullable, bis
 ein Admin es setzt), `role` (`admin`|`member`), `is_active` (0/1, Login-/
 Soft-Delete-Flag), `member_status` (`aktiv`|`inaktiv`|`alter_herr`|`freund`),
 `can_book_for_others` (0/1), `is_wirtschaftskommission` (0/1, WK-Capability-Flag),
 `struck_until` (nullable ISO-Zeitstempel; gestrichen, solange in der Zukunft),
-`email` (NOCASE, partieller UNIQUE-Index nur wenn gesetzt), `avatar_path`
-(relativer Dateiname), `created_at`, `updated_at` (via Trigger aktuell gehalten).
+`email` (NOCASE, partieller UNIQUE-Index nur wenn gesetzt), `email_verified_at`
+(014, M16; NULL = nicht verifiziert, wird bei jeder tatsächlichen Adressänderung
+automatisch zurückgesetzt), `avatar_path` (relativer Dateiname), `created_at`,
+`updated_at` (via Trigger aktuell gehalten).
 
 **`drinks`** (002) — Getränke-Katalog: `id`, `name` (NOCASE UNIQUE),
 `is_available` (0/1), `created_at`, `updated_at`.
@@ -95,6 +97,14 @@ Empfänger höchstens eine Mail erfolgreich rausgeht — ein erneuter Lauf
 (Scheduler-Catch-up oder zweiter Klick auf „Jetzt versenden") ist damit
 idempotent, ein fehlgeschlagener Versuch blockiert einen Retry aber nicht.
 
+**`email_verifications`** (014, M16) — ausgestellte Bestätigungs-Tokens für die
+E-Mail-Verifizierung: `id`, `member_id` → members (`ON DELETE CASCADE`),
+`email` (die Adresse, für die der Token gilt — wird beim Einlösen gegen die
+aktuelle `members.email` geprüft), `token_hash` (SHA-256, UNIQUE; der Token
+selbst wird nie gespeichert), `expires_at` (24h Gültigkeit), `used_at`
+(NULL = offen; wird sowohl beim Einlösen als auch beim Entwerten alter,
+offener Tokens durch einen neu ausgestellten gesetzt), `created_at`.
+
 ### Designentscheidungen
 
 - **Preise in Cents als INTEGER** — vermeidet Float-Rundungsfehler.
@@ -112,30 +122,32 @@ Basis-URL: `/api/v1`. Alle geschützten Endpunkte erwarten `Authorization: Beare
 
 ### Auth
 
-| Methode | Pfad              | Auth | Beschreibung                                      |
-| ------- | ----------------- | ---- | ------------------------------------------------- |
-| POST    | `/auth/login`     | —    | Login mit Username + Passwort                     |
-| POST    | `/auth/logout`    | User | Token serverseitig invalidieren                   |
-| GET     | `/auth/me`        | User | Aktuelles Profil (vollständiges `PublicMember`)   |
-| PATCH   | `/auth/me`        | User | Eigenen Anzeigenamen, E-Mail oder Passwort ändern |
-| POST    | `/auth/me/avatar` | User | Profilbild hochladen (max 5 MB → 256×256 WebP)    |
-| DELETE  | `/auth/me/avatar` | User | Profilbild entfernen                              |
+| Methode | Pfad                           | Auth | Beschreibung                                                                                                                            |
+| ------- | ------------------------------ | ---- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| POST    | `/auth/login`                  | —    | Login mit Username + Passwort                                                                                                           |
+| POST    | `/auth/logout`                 | User | Token serverseitig invalidieren                                                                                                         |
+| POST    | `/auth/verify-email`           | —    | Bestätigungslink einlösen (M16, `{token}` im Body)                                                                                      |
+| POST    | `/auth/me/verify-email/resend` | User | Bestätigungsmail erneut senden (M16, 503 wenn `MAIL_ENABLED=false`)                                                                     |
+| GET     | `/auth/me`                     | User | Aktuelles Profil (vollständiges `PublicMember`)                                                                                         |
+| PATCH   | `/auth/me`                     | User | Eigenen Anzeigenamen, E-Mail oder Passwort ändern (setzt `email_verified_at` zurück und verschickt einen neuen Link bei Adressänderung) |
+| POST    | `/auth/me/avatar`              | User | Profilbild hochladen (max 5 MB → 256×256 WebP)                                                                                          |
+| DELETE  | `/auth/me/avatar`              | User | Profilbild entfernen                                                                                                                    |
 
 ### Mitglieder
 
-| Methode | Pfad                    | Auth     | Beschreibung                                                       |
-| ------- | ----------------------- | -------- | ------------------------------------------------------------------ |
-| GET     | `/members`              | Admin    | Alle Mitglieder                                                    |
-| POST    | `/members`              | Admin    | Neues Mitglied anlegen (inkl. `is_wirtschaftskommission`)          |
-| GET     | `/members/bookable`     | User     | Bebuchbare Mitglieder (nur Konten mit `can_book_for_others`)       |
-| GET     | `/members/strikeable`   | WK/Admin | Streichbare Personen-Konten inkl. bereits gestrichener             |
-| GET     | `/members/:id`          | Admin    | Einzelnes Mitglied                                                 |
-| PATCH   | `/members/:id`          | Admin    | Mitglied aktualisieren (inkl. `email`, `is_wirtschaftskommission`) |
-| POST    | `/members/:id/avatar`   | Admin    | Profilbild eines Mitglieds setzen (max 5 MB → 256×256 WebP)        |
-| DELETE  | `/members/:id/avatar`   | Admin    | Profilbild eines Mitglieds entfernen                               |
-| POST    | `/members/:id/strike`   | WK/Admin | Konto für 2 Wochen streichen (keine Buchungen)                     |
-| POST    | `/members/:id/unstrike` | WK/Admin | Konto vorzeitig entstreichen                                       |
-| DELETE  | `/members/:id`          | Admin    | Mitglied deaktivieren (soft)                                       |
+| Methode | Pfad                    | Auth     | Beschreibung                                                                                                                                                        |
+| ------- | ----------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET     | `/members`              | Admin    | Alle Mitglieder                                                                                                                                                     |
+| POST    | `/members`              | Admin    | Neues Mitglied anlegen (inkl. `is_wirtschaftskommission`)                                                                                                           |
+| GET     | `/members/bookable`     | User     | Bebuchbare Mitglieder (nur Konten mit `can_book_for_others`)                                                                                                        |
+| GET     | `/members/strikeable`   | WK/Admin | Streichbare Personen-Konten inkl. bereits gestrichener                                                                                                              |
+| GET     | `/members/:id`          | Admin    | Einzelnes Mitglied                                                                                                                                                  |
+| PATCH   | `/members/:id`          | Admin    | Mitglied aktualisieren (inkl. `email`, `is_wirtschaftskommission`; setzt `email_verified_at` zurück und verschickt bei Adressänderung einen neuen Bestätigungslink) |
+| POST    | `/members/:id/avatar`   | Admin    | Profilbild eines Mitglieds setzen (max 5 MB → 256×256 WebP)                                                                                                         |
+| DELETE  | `/members/:id/avatar`   | Admin    | Profilbild eines Mitglieds entfernen                                                                                                                                |
+| POST    | `/members/:id/strike`   | WK/Admin | Konto für 2 Wochen streichen (keine Buchungen)                                                                                                                      |
+| POST    | `/members/:id/unstrike` | WK/Admin | Konto vorzeitig entstreichen                                                                                                                                        |
+| DELETE  | `/members/:id`          | Admin    | Mitglied deaktivieren (soft)                                                                                                                                        |
 
 ### Getränke
 

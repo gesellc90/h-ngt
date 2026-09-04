@@ -71,6 +71,14 @@ const envSchema = z
     MAIL_SCHEDULE_ENABLED: boolEnv(false),
     /** Stunde (0–23, Europe/Berlin) am 1. des Monats, ab der der Vormonat versendet wird. */
     MAIL_SCHEDULE_HOUR: z.coerce.number().int().min(0).max(23).default(3),
+
+    /**
+     * M16 — E-Mail-Verifizierung.
+     * Basis-URL des Frontends (ohne trailing slash), für den absoluten Link
+     * in der Bestätigungsmail (`<APP_BASE_URL>/verify-email?token=…`). Auf
+     * dem Pi z. B. `http://haengt.local` — siehe docs/DEPLOYMENT.md.
+     */
+    APP_BASE_URL: z.string().default('http://localhost:3001'),
   })
   .superRefine((data, ctx) => {
     // Nur wenn der Mailversand aktiv scharfgeschaltet ist, sind die

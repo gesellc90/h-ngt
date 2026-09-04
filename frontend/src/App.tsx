@@ -4,6 +4,7 @@ import { ToastProvider } from './contexts/ToastContext.js';
 import ProtectedRoute from './components/ProtectedRoute.js';
 import Layout from './components/Layout.js';
 import LoginPage from './pages/LoginPage.js';
+import VerifyEmailPage from './pages/VerifyEmailPage.js';
 import BookingPage from './pages/BookingPage.js';
 import ThekePage from './pages/ThekePage.js';
 import ProfilePage from './pages/ProfilePage.js';
@@ -31,8 +32,9 @@ export default function App() {
     <ToastProvider>
       <AuthProvider>
         <Routes>
-          {/* Öffentliche Route */}
+          {/* Öffentliche Routen */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
 
           {/* Geschützte Routen — für alle eingeloggten User */}
           <Route element={<ProtectedRoute />}>

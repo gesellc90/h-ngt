@@ -45,6 +45,11 @@ const FRONTEND_URL = `http://127.0.0.1:${FRONTEND_PORT}`;
 // dem Update-Test eine `update-status.json` vorzulegen.
 const UPDATE_STATE_DIR =
   process.env['E2E_UPDATE_STATE_DIR'] ?? path.join(tmpdir(), 'getraenke-e2e-update-state');
+// Gleiches Prinzip wie bei UPDATE_STATE_DIR: fester Pfad statt mkdtemp, damit
+// 10-email-verification.spec.ts (läuft in einem eigenen Worker-Prozess) die
+// DB-Datei unabhängig über denselben Fallback wiederfindet, um Tokens direkt
+// auszulesen — ohne IPC mit diesem Setup-Prozess.
+const E2E_DB_DIR = process.env['E2E_DB_DIR'] ?? path.join(tmpdir(), 'getraenke-e2e-db');
 
 export interface E2EHandle {
   tmpDir: string;
@@ -91,7 +96,10 @@ function spawnWithEnv(
 
 export default async function globalSetup(): Promise<void> {
   const tmpDir = mkdtempSync(path.join(tmpdir(), 'getraenke-e2e-'));
-  const dbPath = path.join(tmpDir, 'getraenke.db');
+  // Bewusst NICHT unter tmpDir (mkdtemp-Zufallssuffix) — siehe E2E_DB_DIR-Kommentar
+  // oben: 10-email-verification.spec.ts muss denselben Pfad unabhängig berechnen können.
+  mkdirSync(E2E_DB_DIR, { recursive: true });
+  const dbPath = path.join(E2E_DB_DIR, 'getraenke.db');
   const jwtSecret = randomBytes(32).toString('hex'); // 64 Zeichen
 
   // Für den Auto-Update-Rückkanal (M14): Verzeichnis muss existieren, bevor
@@ -107,6 +115,9 @@ export default async function globalSetup(): Promise<void> {
     JWT_EXPIRES_IN: '8h',
     LOG_LEVEL: 'warn',
     UPDATE_STATE_DIR,
+    // M16: Basis-URL für den Link in der Verifizierungsmail — im E2E-Setup
+    // die Vite-Preview-URL, damit sie realistisch auf das Frontend zeigt.
+    APP_BASE_URL: FRONTEND_URL,
     // Rate-Limiter deaktivieren: alle E2E-Requests kommen von 127.0.0.1
     // und würden nach 5 Logins den gemeinsamen Bucket erschöpfen.
     DISABLE_RATE_LIMIT: 'true',
@@ -175,6 +186,7 @@ export default async function globalSetup(): Promise<void> {
       if (!backend.killed) backend.kill('SIGTERM');
       if (!frontend.killed) frontend.kill('SIGTERM');
       rmSync(tmpDir, { recursive: true, force: true });
+      rmSync(E2E_DB_DIR, { recursive: true, force: true });
       rmSync(UPDATE_STATE_DIR, { recursive: true, force: true });
     } catch {
       /* best effort */
