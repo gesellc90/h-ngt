@@ -43,6 +43,7 @@ const makeMember = (
   is_wirtschaftskommission: 0,
   struck_until,
   email: null,
+  email_verified_at: null,
   avatar_path: null,
   created_at: '',
   updated_at: '',

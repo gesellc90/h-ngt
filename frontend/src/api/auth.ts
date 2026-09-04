@@ -35,4 +35,18 @@ export const authApi = {
   logout(): Promise<void> {
     return apiFetch<void>('/auth/logout', { method: 'POST' });
   },
+
+  /** Öffentlich: löst einen Bestätigungslink ein (M16). */
+  verifyEmail(token: string): Promise<PublicMember> {
+    return apiFetch<PublicMember>('/auth/verify-email', {
+      method: 'POST',
+      body: { token },
+      anonymous: true,
+    });
+  },
+
+  /** "Bestätigungsmail erneut senden"-Button im Profil. */
+  resendVerification(): Promise<void> {
+    return apiFetch<void>('/auth/me/verify-email/resend', { method: 'POST' });
+  },
 };

@@ -18,6 +18,7 @@ describe('loadEnv', () => {
     expect(env.AVATAR_DIR).toBe('./data/avatars');
     expect(env.UPDATE_STATE_DIR).toBe('./data');
     expect(env.TRUST_PROXY).toBe(0);
+    expect(env.APP_BASE_URL).toBe('http://localhost:3001');
   });
 
   it('wirft, wenn JWT_SECRET fehlt', () => {

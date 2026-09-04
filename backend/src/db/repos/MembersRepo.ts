@@ -76,6 +76,12 @@ export class MembersRepo {
     const existing = this.findById(id);
     if (!existing) return undefined;
 
+    // Eine Verifizierung gilt nur für die Adresse, für die sie ausgestellt
+    // wurde (M16) — bei jeder tatsächlichen Änderung der E-Mail-Adresse wird
+    // email_verified_at hier zentral zurückgesetzt, unabhängig davon, ob der
+    // Aufruf von PATCH /auth/me oder PATCH /members/:id kommt.
+    const emailChanged = input.email !== undefined && input.email !== existing.email;
+
     this.db
       .prepare(
         `UPDATE members
@@ -87,6 +93,7 @@ export class MembersRepo {
              can_book_for_others      = @can_book_for_others,
              is_wirtschaftskommission = @is_wirtschaftskommission,
              email                    = @email,
+             email_verified_at        = @email_verified_at,
              avatar_path              = @avatar_path
          WHERE id = @id`,
       )
@@ -102,10 +109,21 @@ export class MembersRepo {
         is_wirtschaftskommission:
           input.is_wirtschaftskommission ?? existing.is_wirtschaftskommission,
         email: input.email !== undefined ? input.email : existing.email,
+        email_verified_at: emailChanged ? null : existing.email_verified_at,
         avatar_path: input.avatar_path !== undefined ? input.avatar_path : existing.avatar_path,
       });
 
     return this.findById(id);
+  }
+
+  /**
+   * Markiert die aktuell hinterlegte E-Mail-Adresse als verifiziert.
+   * Getrennt von `update()`, weil dieser Aufruf selbst KEINE Änderung an
+   * `email` ist und daher `email_verified_at` nicht wieder auf NULL
+   * zurücksetzen darf.
+   */
+  markEmailVerified(id: number, verifiedAt: string): void {
+    this.db.prepare('UPDATE members SET email_verified_at = ? WHERE id = ?').run(verifiedAt, id);
   }
 
   /**

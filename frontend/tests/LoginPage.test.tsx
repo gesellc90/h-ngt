@@ -34,6 +34,7 @@ const memberMock: PublicMember = {
   is_wirtschaftskommission: 0,
   struck_until: null,
   email: null,
+  email_verified_at: null,
   avatar_path: null,
   created_at: '2024-01-01T00:00:00.000Z',
   updated_at: '2024-01-01T00:00:00.000Z',

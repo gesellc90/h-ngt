@@ -84,6 +84,26 @@ Pi länger als einen Kalendermonat aus, muss der übersprungene Monat über
 | „Jetzt versenden" tut scheinbar nichts   | Für den Monat wurde bereits erfolgreich versendet   | Versandprotokoll prüfen — Idempotenz ist beabsichtigt                       |
 | POST /mail/dispatch: 503 `MAIL_DISABLED` | `MAIL_ENABLED=false`                                | ENV setzen, Service neu starten                                             |
 
+## E-Mail-Verifizierung (M16)
+
+Mitglieder können ihre hinterlegte Adresse per Bestätigungslink verifizieren
+— nutzt denselben `MailService`/SMTP-Weg wie oben, ist aber technisch und
+organisatorisch unabhängig vom Monatsabrechnungs-Versand:
+
+- **Kein Gating.** Der Verifizierungsstatus ist rein informativ (Badge im
+  Profil/Admin-UI). Der Monatsabrechnungs-Versand geht weiterhin an alle
+  hinterlegten Adressen, verifiziert oder nicht.
+- **Auslöser:** automatisch bei jeder tatsächlichen Adressänderung
+  (`PATCH /auth/me`, `PATCH /members/:id`) sowie über den
+  „Bestätigungsmail erneut senden"-Button im Profil.
+- **`APP_BASE_URL`** muss auf die vom Frontend erreichbare Basis-URL zeigen
+  (siehe [`DEPLOYMENT.md`](./DEPLOYMENT.md)) — sonst zeigt der Link in der
+  Mail ins Leere oder auf die falsche Adresse.
+- Funktioniert unabhängig von `MAIL_ENABLED`: Ist der Versand deaktiviert,
+  wird die Adresse trotzdem gespeichert, nur die Mail selbst wird
+  übersprungen und geloggt. Der explizite Resend-Button gibt in dem Fall
+  denselben 503 `MAIL_DISABLED` zurück wie die Testmail oben.
+
 ## Bekannte Einschränkung
 
 `ReportService.calculateAllZeiger` filtert Zeiger nach dem UTC-Datum von

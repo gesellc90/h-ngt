@@ -23,6 +23,8 @@ export interface MemberRow {
    */
   struck_until: string | null;
   email: string | null;
+  /** ISO-8601-UTC-Zeitpunkt der Bestätigung (M16). NULL = nicht verifiziert. */
+  email_verified_at: string | null;
   avatar_path: string | null;
   created_at: string;
   updated_at: string;
@@ -121,5 +123,22 @@ export interface MailDispatchRow {
   error: string | null;
   message_id: string | null;
   triggered_by: MailDispatchTrigger;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// E-Mail-Verifizierung (M16)
+// ---------------------------------------------------------------------------
+
+export interface EmailVerificationRow {
+  id: number;
+  member_id: number;
+  /** Adresse, für die der Token ausgestellt wurde — siehe Migration 014. */
+  email: string;
+  /** SHA-256-Hash des Tokens, nie der Klartext. */
+  token_hash: string;
+  expires_at: string;
+  /** NULL = offen (weder eingelöst noch entwertet). */
+  used_at: string | null;
   created_at: string;
 }

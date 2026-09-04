@@ -11,8 +11,14 @@
  */
 
 import { rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
 import type { E2EHandle } from './global-setup.js';
+
+// Gleicher Fallback wie in global-setup.ts (E2E_DB_DIR) — fester Pfad statt
+// mkdtemp, siehe Kommentar dort.
+const E2E_DB_DIR = process.env['E2E_DB_DIR'] ?? path.join(tmpdir(), 'getraenke-e2e-db');
 
 function stopProcess(label: string, child: ChildProcess): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -44,6 +50,13 @@ export default async function globalTeardown(): Promise<void> {
     console.log(`[e2e-teardown] tmpDir entfernt: ${handle.tmpDir}`);
   } catch (err) {
     console.warn('[e2e-teardown] tmpDir-Cleanup fehlgeschlagen:', err);
+  }
+
+  try {
+    rmSync(E2E_DB_DIR, { recursive: true, force: true });
+    console.log(`[e2e-teardown] DB-Verzeichnis entfernt: ${E2E_DB_DIR}`);
+  } catch (err) {
+    console.warn('[e2e-teardown] DB-Verzeichnis-Cleanup fehlgeschlagen:', err);
   }
 
   try {

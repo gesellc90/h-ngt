@@ -7,3 +7,4 @@ export { TokenBlocklistRepo } from './TokenBlocklistRepo.js';
 export { VerbindungenRepo } from './VerbindungenRepo.js';
 export { ZeigerRepo } from './ZeigerRepo.js';
 export { MailDispatchRepo } from './MailDispatchRepo.js';
+export { EmailVerificationRepo } from './EmailVerificationRepo.js';

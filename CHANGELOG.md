@@ -9,6 +9,15 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- **M16 — E-Mail-Verifizierung.** Mitglieder können ihre hinterlegte
+  E-Mail-Adresse per Bestätigungslink bestätigen (24h gültig, einmal
+  verwendbar). Ein Badge im Profil und in der Admin-Mitgliederliste zeigt den
+  Status; ein „Bestätigungsmail erneut senden"-Button im Profil fordert bei
+  Bedarf einen neuen Link an. Automatisch ausgelöst, sobald ein Mitglied
+  selbst (`PATCH /auth/me`) oder ein Admin (`PATCH /members/:id`) die
+  Adresse setzt oder ändert. Rein informativ — der Monatsabrechnungs-Versand
+  aus M15 geht weiterhin an alle hinterlegten Adressen, unabhängig vom
+  Verifizierungsstatus.
 - **M15 — Automatischer Mailversand der Monatsabrechnungen.** Am 1. des
   Monats bekommt jedes aktive Mitglied mit hinterlegter E-Mail-Adresse und
   Verbrauch im Vormonat automatisch seine Abrechnung als PDF per Mail; die

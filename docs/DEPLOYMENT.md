@@ -106,6 +106,14 @@ EOF
 > Vorlage in `backend/.env.example`, Inbetriebnahme-Ablauf in
 > [`docs/MAIL.md`](./MAIL.md). Ohne `MAIL_ENABLED=true` bleiben sie wirkungslos.
 
+> **M16 — E-Mail-Verifizierung:** `APP_BASE_URL` gehört ebenfalls in
+> `/etc/getraenke/env` — die Basis-URL, unter der das Frontend erreichbar ist
+> (für den absoluten Link in der Bestätigungsmail). Auf dem Pi z. B.
+> `http://haengt.local`, sofern der Reverse-Proxy aus Schritt 11 der
+> [Raspberry-Pi-Anleitung](./RASPBERRY-PI-SETUP.md) eingerichtet ist, sonst
+> `http://<pi-ip>:3001`. Ohne Reverse-Proxy zeigt der Link sonst auf die
+> API-Adresse statt auf die ausgelieferte SPA.
+
 > **Hinweis zur Bind-Adresse:** Express bindet aktuell ohne `host`-Parameter,
 > d. h. auf `0.0.0.0` — die App ist im Vereins-WLAN über
 > `http://<pi-ip>:3001` erreichbar. Falls später ein Reverse-Proxy

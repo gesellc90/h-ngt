@@ -16,9 +16,11 @@ import {
   VerbindungenRepo,
   ZeigerRepo,
   MailDispatchRepo,
+  EmailVerificationRepo,
 } from './db/repos/index.js';
 import { AuthService } from './services/AuthService.js';
 import { MembersService } from './services/MembersService.js';
+import { EmailVerificationService } from './services/EmailVerificationService.js';
 import { DrinksService } from './services/DrinksService.js';
 import { DrinkCategoriesService } from './services/DrinkCategoriesService.js';
 import { BookingService } from './services/BookingService.js';
@@ -112,6 +114,7 @@ export function createApp({ logger, db, env }: AppOptions): Express {
   const verbindungenRepo = new VerbindungenRepo(db);
   const zeigerRepo = new ZeigerRepo(db);
   const mailDispatchRepo = new MailDispatchRepo(db);
+  const emailVerificationRepo = new EmailVerificationRepo(db);
 
   const authService = new AuthService(
     membersRepo,
@@ -121,7 +124,32 @@ export function createApp({ logger, db, env }: AppOptions): Express {
     env.JWT_EXPIRES_IN,
   );
 
-  const membersService = new MembersService(membersRepo, auditLogRepo);
+  // Vorgezogen (sonst nach den übrigen Services): EmailVerificationService
+  // braucht MailService, MembersService wiederum EmailVerificationService,
+  // um beim Ändern der Adresse (PATCH /auth/me, PATCH /members/:id)
+  // automatisch einen Bestätigungslink zu verschicken (M16).
+  const mailService = new MailService(
+    {
+      enabled: env.MAIL_ENABLED,
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      secure: env.SMTP_SECURE,
+      user: env.SMTP_USER,
+      pass: env.SMTP_PASS,
+      from: env.MAIL_FROM,
+    },
+    logger,
+  );
+  const emailVerificationService = new EmailVerificationService(
+    emailVerificationRepo,
+    membersRepo,
+    mailService,
+    auditLogRepo,
+    env.APP_BASE_URL,
+    logger,
+  );
+
+  const membersService = new MembersService(membersRepo, auditLogRepo, emailVerificationService);
   const drinksService = new DrinksService(drinksRepo, drinkCategoriesRepo, auditLogRepo);
   const drinkCategoriesService = new DrinkCategoriesService(drinkCategoriesRepo, auditLogRepo);
   const bookingService = new BookingService(
@@ -136,18 +164,6 @@ export function createApp({ logger, db, env }: AppOptions): Express {
   const verbindungenService = new VerbindungenService(verbindungenRepo, auditLogRepo);
   const updateService = new UpdateService(env.UPDATE_STATE_DIR, auditLogRepo);
 
-  const mailService = new MailService(
-    {
-      enabled: env.MAIL_ENABLED,
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      secure: env.SMTP_SECURE,
-      user: env.SMTP_USER,
-      pass: env.SMTP_PASS,
-      from: env.MAIL_FROM,
-    },
-    logger,
-  );
   const summaryCc = env.MAIL_SUMMARY_CC
     ? env.MAIL_SUMMARY_CC.split(',')
         .map((s) => s.trim())
@@ -180,7 +196,10 @@ export function createApp({ logger, db, env }: AppOptions): Express {
 
   // -- Routen -----------------------------------------------------------------
   app.use('/api/v1', healthRouter);
-  app.use('/api/v1/auth', createAuthRouter(authService, membersService, env.AVATAR_DIR));
+  app.use(
+    '/api/v1/auth',
+    createAuthRouter(authService, membersService, emailVerificationService, env.AVATAR_DIR, env),
+  );
   app.use('/api/v1/members', createMembersRouter(authService, membersService, env.AVATAR_DIR));
   app.use('/api/v1/drinks', createDrinksRouter(authService, drinksService));
   app.use(

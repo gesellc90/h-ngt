@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { BCRYPT_COST } from './AuthService.js';
 import type { MembersRepo } from '../db/repos/MembersRepo.js';
 import type { AuditLogRepo } from '../db/repos/AuditLogRepo.js';
+import type { EmailVerificationService } from './EmailVerificationService.js';
 import type { MemberRow, MemberStatus } from '../db/types.js';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -24,6 +25,7 @@ export class MembersService {
   constructor(
     private readonly members: MembersRepo,
     private readonly auditLog: AuditLogRepo,
+    private readonly emailVerification: EmailVerificationService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -182,6 +184,13 @@ export class MembersService {
         ],
       },
     });
+
+    // Adresse gesetzt/geändert → MembersRepo.update hat email_verified_at
+    // bereits zurückgesetzt; hier den neuen Bestätigungslink verschicken.
+    // Ein leeres/entferntes email (null) braucht keine Verifizierungsmail.
+    if (input.email !== undefined && input.email !== null && input.email !== existing.email) {
+      await this.emailVerification.issueAndSend(updated!, actorId);
+    }
 
     return updated!;
   }
