@@ -18,6 +18,7 @@ Dieser Plan unterteilt das Projekt in 10 aufeinander aufbauende Meilensteine. Je
 | M12 | Getränke-Kategorien & Verbrauchs-Auswertung              | 3–4 Tage          | M4, M5, M6                  |
 | M13 | Wirtschaftskommission & Konten-Streichung                | 2–3 Tage          | M4, M5, M9                  |
 | M14 | Automatisches App-Update (2-Wochen-Timer + Admin-Button) | 4–6 Tage          | M3, M5, M7                  |
+| M15 | Automatischer Mailversand der Monatsabrechnungen         | 3–4 Tage          | M6, M10                     |
 
 ---
 
@@ -553,6 +554,47 @@ Dieser Plan unterteilt das Projekt in 10 aufeinander aufbauende Meilensteine. Je
 - **Token-Scope:** Fine-Grained-PAT strikt auf dieses Repo + `contents:read`; nur für den Helper (root/deploy-Kontext) lesbar, **nie** im `getraenke`-App-Prozess.
 
 **Definition of Done:** Ohne manuellen Tag-Push zieht der Pi zweiwöchentlich automatisch das neueste stabile Release, sichert vorher die DB, swappt atomar und rollt bei fehlgeschlagenem Smoke-Test selbsttätig zurück. Ein Admin sieht im Admin-Bereich die laufende und die verfügbare Version und kann per Button „Jetzt prüfen" bzw. „Jetzt aktualisieren" auslösen; der Anstoß erfolgt über eine Marker-Datei ohne jegliche sudo-Rechte im App-Prozess. Die App macht selbst keinen Netzabruf zu GitHub. Lint (inkl. `shellcheck`), `systemd-analyze verify`, Unit-, Integrations- und E2E-Tests grün.
+
+---
+
+## M15 — Automatischer Mailversand der Monatsabrechnungen
+
+**Ziel:** Am 1. eines Monats bekommt jedes aktive Mitglied mit hinterlegter E-Mail-Adresse und Verbrauch im Vormonat automatisch seine Getränkeabrechnung als PDF zugeschickt (kurzer Text mit dem Gesamtbetrag). Zusätzlich geht eine Sammelmail an die Wirtschaftskommission mit der Sammel-Abrechnung aller Mitglieder und der Zeiger-Übersicht des Monats (je PDF + CSV). Genutzt wird das bestehende Vereins-Postfach bei df.eu per SMTP.
+
+**Abhängigkeit:** M6 (Reporting/PDF/CSV — `ReportService`, `pdfFormatter`, `csvFormatter`), M10 (Mitglieder-E-Mail-Adresse).
+
+### Festgelegte Entscheidungen
+
+- **Zwei getrennte ENV-Schalter.** `MAIL_ENABLED` schaltet den Versandweg als Ganzes frei (Testmail, manueller Versand); `MAIL_SCHEDULE_ENABLED` schaltet zusätzlich den automatischen 1.-des-Monats-Versand frei. Ein frischer Deploy landet immer mit beidem auf `false` — nichts passiert von selbst, bis ein Admin bewusst erst testet und dann aktiviert (siehe `docs/MAIL.md`).
+- **SMTP statt Cloud-Versanddienst.** Auf Wunsch das bestehende df.eu-Postfach (`sslout.df.eu:465`, `nodemailer`) statt eines Drittanbieters (Brevo/Mailgun) — keine zusätzliche externe Abhängigkeit, passt zum „keine Cloud"-Grundsatz der App.
+- **Kein Versand bei 0,00 €.** Ein aktives Mitglied ohne Buchungen im Monat bekommt keine Mail — reduziert Rauschen, verhindert, dass die Monatsmail als belanglos ignoriert wird. In der Sammelabrechnung taucht das Mitglied trotzdem auf (vollständige Auswertung bleibt bei den bestehenden `/reports`-Endpunkten unverändert).
+- **Idempotenz über `mail_dispatches` statt über den Scheduler.** Jede versendete/fehlgeschlagene Mail wird protokolliert; zwei partielle UNIQUE-Indizes (`WHERE status='sent'`) verhindern einen doppelten Erfolgs-Versand pro Monat und Empfänger. Das macht sowohl den Scheduler-Catch-up nach einem Pi-Neustart als auch den manuellen „Jetzt versenden"-Button zum selben einfachen Aufruf: `BillingMailService.run()` erneut ausführen — bereits Versendetes wird übersprungen, Fehlgeschlagenes automatisch erneut versucht. Skip-Gründe (keine E-Mail, kein Verbrauch, bereits versendet) werden bewusst NICHT gespeichert — sie sind aus den Live-Daten jederzeit über den Dry-Run neu berechenbar und würden sonst bei jedem Vorschau-Klick weiter anwachsen.
+- **Scheduler: stündlicher Check statt exaktem Cron-Slot.** Der Vereins-Pi läuft nicht zwingend 24/7. Statt eines einmaligen Timers prüft ein stündlicher In-Process-Tick, ob der konfigurierte Termin (`MAIL_SCHEDULE_HOUR`, Europe/Berlin) für den Vormonat „erreicht oder überschritten" ist — inklusive eines sofortigen Checks beim Prozessstart (Catch-up). Deckt keinen Ausfall über mehr als einen Kalendermonat ab; dafür ist der manuelle Versand im Admin-UI gedacht.
+- **Getrennte Mails pro Mitglied statt Sammel-BCC.** Jede Einzelabrechnung geht als eigene, individuell adressierte Mail raus — kein CC/BCC unter Mitgliedern, keine Adress-Leaks.
+- **Passwort niemals im Repo/Log.** `SMTP_PASS` kommt ausschließlich in `/etc/getraenke/env` auf dem Pi; `MailService` maskiert es defensiv, falls es in einer SMTP-Fehlermeldung auftauchen sollte.
+
+### Umsetzung
+
+- [x] Migration 013: Tabelle `mail_dispatches` (`period`, `kind` `member`|`summary`, `member_id`, `recipient`, `status` `sent`|`failed`, `total_cents`, `error`, `message_id`, `triggered_by` `schedule`|`manual`) + zwei partielle UNIQUE-Indizes für Idempotenz; `MailDispatchRepo` (`create`, `findByPeriod`, `hasSent`).
+- [x] ENV-Erweiterung (`utils/env.ts`): `MAIL_ENABLED`, `SMTP_HOST`/`PORT`/`SECURE`/`USER`/`PASS`, `MAIL_FROM`, `MAIL_SUMMARY_TO`/`_CC`, `MAIL_SCHEDULE_ENABLED`, `MAIL_SCHEDULE_HOUR`. Eigener `boolEnv()`-Helfer statt `z.coerce.boolean()` (Footgun: `Boolean("false")` ist `true`). `superRefine` erzwingt SMTP-Zugangsdaten + Empfänger nur, wenn `MAIL_ENABLED=true` gesetzt ist.
+- [x] `csvFormatter.generateAllMembersCsv()`: fehlende Sammel-CSV über alle Mitglieder eines Monats (Pendant zum bereits vorhandenen `generateAllMembersPdf`), für den Sammelmail-Anhang.
+- [x] `MailService`: `nodemailer`-Wrapper (`verify()`, `send()` mit 2 Versuchen + Backoff, `MAIL_ENABLED=false` → Kurzschluss ohne SMTP-Aufruf, Passwort-Maskierung in Fehlermeldungen).
+- [x] `BillingMailService.run(year, month, {triggeredBy, dryRun, actorId})`: iteriert `ReportService.calculateAllMembers`, ermittelt je Mitglied Senden/Skip-Grund, verschickt PDF-Anhang; anschließend die Sammelmail (4 Anhänge: Sammel-PDF/CSV + Zeiger-Übersicht-PDF/CSV) an `MAIL_SUMMARY_TO`/`_CC`. `dryRun` berechnet denselben Plan, ohne zu senden oder zu speichern (Status `planned` statt `sent`/`skipped`).
+- [x] `MailScheduler` + reine Funktion `computeDueBillingPeriod(now, hour)` (Kern-Zeitlogik, direkt unit-testbar ohne Fake-Timer — nutzt `ReportService.monthBounds` für die Europe/Berlin-Grenze). In `app.ts` nur außerhalb von Tests gestartet (`NODE_ENV !== 'test'`), damit `createApp()` in Tests frei von Hintergrund-Timern bleibt.
+- [x] Routen (Admin-only, `/api/v1/mail`): `GET /status` (Konfiguration ohne Zugangsdaten), `POST /test` (Testmail, prüft SMTP-Verbindung), `GET /preview` (Dry-Run, funktioniert auch ohne SMTP), `POST /dispatch` (echter Versand, 503 `MAIL_DISABLED` wenn deaktiviert; protokolliert den auslösenden Admin im Audit-Log), `GET /dispatches` (Versandprotokoll). Rate-Limit auf `/test` und `/dispatch` (5 Min/10 Requests, wie beim Login-Limiter deaktivierbar für E2E).
+- [x] **Tests:** Vitest — `MailScheduler.test.ts` (Zeitlogik inkl. Jahreswechsel/Sommerzeit/Catch-up, plus Start/Stop mit Fake-Timern), `MailService.test.ts` (Retry, Passwort-Maskierung, `MAIL_ENABLED=false`, gegen gemocktes `nodemailer`), `BillingMailService.test.ts` (Senden/Skip-Gründe, Idempotenz, dryRun, Fehler+Retry, Sammelmail-Anhänge/CC, Audit-Log-Actor — gegen eine echte In-Memory-DB, nur `MailService` gefaked), `MailDispatchRepo.test.ts`, `csvFormatter.test.ts` (`generateAllMembersCsv`); Supertest (`tests/integration/mail.test.ts`) — Routing/Auth/Validierung aller fünf Endpunkte, `MAIL_ENABLED=false` deckt den 503-Pfad ohne echten SMTP-Server ab. Gesamte Backend-Suite grün, Coverage-Ratchet weiterhin erfüllt.
+
+### Frontend
+
+- [x] Neuer Admin-Reiter **„Mailversand"** (`/admin/mail`, `MailPage.tsx`): Status-Karte (aktiviert?, SMTP-Ziel, Sammel-Empfänger, Zeitplan), Testmail-Feld, Monatsauswahl mit „Vorschau (Dry-Run)"-Tabelle (Empfänger/Betrag/Status/Grund) und „Jetzt versenden"-Button (Bestätigungsdialog mit Empfängerzahl), Versandprotokoll-Tabelle mit Fehleranzeige — erneutes „Jetzt versenden" versucht Fehlgeschlagenes automatisch erneut (kein separater Retry-Mechanismus nötig, folgt aus der Idempotenz).
+- [x] `mailApi` (`frontend/src/api/mail.ts`) + Typen in `types/api.ts` (`MailStatus`, `MailRunResult`, `MailDispatchRow`).
+
+### Dokumentation
+
+- [x] `docs/MAIL.md`: Ablauf, Inbetriebnahme-Reihenfolge (deploy deaktiviert → Zugangsdaten → Testmail → Vorschau → einmal manuell → erst dann Zeitplan aktivieren), Idempotenz/Ausfallsicherheit, Fehlerbehebungs-Tabelle, bekannte Einschränkung bei der Zeiger-Monatsgrenze.
+- [x] `backend/.env.example`, `docs/DEPLOYMENT.md` (Verweis auf `docs/MAIL.md`), `ARCHITECTURE.md` (Tabelle `mail_dispatches`, `/mail`-Routen-Übersicht), `CHANGELOG.md`.
+
+**Definition of Done:** Mit gesetzten SMTP-Zugangsdaten und `MAIL_ENABLED=true` kann ein Admin per Testmail die Verbindung prüfen, per Dry-Run sehen, wer für einen Monat was bekäme, und per Klick den echten Versand auslösen. Nach Aktivierung von `MAIL_SCHEDULE_ENABLED` läuft der Versand am 1. des Monats automatisch, holt einen verpassten Termin (Pi war aus) beim nächsten Start nach und verschickt dabei nichts doppelt. Lint, Typecheck, Unit- und Integrationstests grün.
 
 ---
 

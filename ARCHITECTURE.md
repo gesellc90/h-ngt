@@ -85,6 +85,16 @@ buchende Theken-Konto), `zeiger_id` → zeiger (NULL = Personenbuchung).
 „Zeiger" (Couleurbesuche/Veranstaltungen, deren Buchungen auf die Vereinskasse
 statt auf ein Mitglied laufen). `zeiger.status` ∈ `offen`|`geschlossen`.
 
+**`mail_dispatches`** (013, M15) — Versandprotokoll des automatischen
+Monatsabrechnungs-Mailversands: `id`, `period` (`"YYYY-MM"`), `kind`
+(`member`|`summary`), `member_id` → members (NULL bei `summary`), `recipient`,
+`status` (`sent`|`failed`), `total_cents`, `error`, `message_id`,
+`triggered_by` (`schedule`|`manual`), `created_at`. Zwei partielle
+UNIQUE-Indizes (`WHERE status = 'sent'`) erzwingen, dass pro Monat und
+Empfänger höchstens eine Mail erfolgreich rausgeht — ein erneuter Lauf
+(Scheduler-Catch-up oder zweiter Klick auf „Jetzt versenden") ist damit
+idempotent, ein fehlgeschlagener Versuch blockiert einen Retry aber nicht.
+
 ### Designentscheidungen
 
 - **Preise in Cents als INTEGER** — vermeidet Float-Rundungsfehler.
@@ -179,6 +189,19 @@ Basis-URL: `/api/v1`. Alle geschützten Endpunkte erwarten `Authorization: Beare
 | POST    | `/update/check`  | Schreibt Marker `"check"` (nur Prüfung, keine Installation) → 202             |
 
 Keine dieser Routen löst ein Update selbst aus oder spricht mit GitHub — Details siehe „Auto-Update & Privilege-Separation" unten.
+
+### Mail (M15, alle Admin-only)
+
+| Methode | Pfad                            | Beschreibung                                                                            |
+| ------- | ------------------------------- | --------------------------------------------------------------------------------------- |
+| GET     | `/mail/status`                  | Konfiguration ohne Zugangsdaten (aktiviert?, SMTP-Ziel, Empfänger, Zeitplan)            |
+| POST    | `/mail/test`                    | Testmail an eine frei wählbare Adresse; 503 `MAIL_DISABLED` wenn deaktiviert            |
+| GET     | `/mail/preview?year=&month=`    | Dry-Run: wer bekäme was, ohne zu versenden — funktioniert auch bei `MAIL_ENABLED=false` |
+| POST    | `/mail/dispatch`                | Löst den echten Versand aus (idempotent, siehe `mail_dispatches`)                       |
+| GET     | `/mail/dispatches?year=&month=` | Versandprotokoll eines Monats                                                           |
+
+Details zum Ablauf, zur Inbetriebnahme und zur Idempotenz-Garantie siehe
+[`docs/MAIL.md`](docs/MAIL.md).
 
 ## Auth-Flow
 

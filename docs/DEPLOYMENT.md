@@ -100,6 +100,12 @@ JWT_EXPIRES_IN=8h
 EOF
 ```
 
+> **M15 — Mailversand:** Die ENV-Variablen für den automatischen Versand der
+> Monatsabrechnungen (`MAIL_ENABLED`, `SMTP_*`, `MAIL_FROM`,
+> `MAIL_SUMMARY_TO`/`_CC`, `MAIL_SCHEDULE_*`) gehören in dieselbe Datei —
+> Vorlage in `backend/.env.example`, Inbetriebnahme-Ablauf in
+> [`docs/MAIL.md`](./MAIL.md). Ohne `MAIL_ENABLED=true` bleiben sie wirkungslos.
+
 > **Hinweis zur Bind-Adresse:** Express bindet aktuell ohne `host`-Parameter,
 > d. h. auf `0.0.0.0` — die App ist im Vereins-WLAN über
 > `http://<pi-ip>:3001` erreichbar. Falls später ein Reverse-Proxy
