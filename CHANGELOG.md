@@ -9,6 +9,34 @@ und das Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Added
 
+- _Noch nichts hinzugefügt_
+
+### Changed
+
+- _Noch nichts geändert_
+
+### Deprecated
+
+- _Noch nichts deprecatet_
+
+### Removed
+
+- _Noch nichts entfernt_
+
+### Fixed
+
+- _Noch nichts gefixt_
+
+### Security
+
+- _Keine sicherheitsrelevanten Änderungen bisher_
+
+---
+
+## [0.3.0] - 2026-09-04
+
+### Added
+
 - **M16 — E-Mail-Verifizierung.** Mitglieder können ihre hinterlegte
   E-Mail-Adresse per Bestätigungslink bestätigen (24h gültig, einmal
   verwendbar). Ein Badge im Profil und in der Admin-Mitgliederliste zeigt den
